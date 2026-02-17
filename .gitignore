@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+*.egg
+
+# PyInstaller
+build/
+dist/
+
+# Project output and logs
+output/
+*.log
+*.json
+
+# Xcode test bundles (often large)
+*.xcresult
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# WeasyPrint / system (optional cache)
+.weasyprint/

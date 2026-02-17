@@ -587,6 +587,7 @@ def build_html(
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
   <style>
+    /* Dark theme (default) */
     body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
                 Arial, sans-serif; margin: 32px; background: #1a1a1a; color: #e0e0e0; }}
     .card {{ border: 1px solid #3a3a3a; border-radius: 12px; padding: 20px;
@@ -604,21 +605,53 @@ def build_html(
     canvas {{ max-width: 520px; margin: auto; }}
     table {{ color: #e0e0e0; }}
     th {{ color: #d1d5db; }}
+    .theme-toggle {{ margin-bottom: 12px; }}
+    .theme-toggle button {{ background: #3a3a3a; color: #e0e0e0; border: 1px solid #555;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }}
+    .theme-toggle button:hover {{ background: #4a4a4a; }}
+    .screenshot-row {{ background: #1f1f1f; }}
+    .screenshot-row .screenshot-label {{ color: #9ca3af; }}
+
+    /* Light theme (when body has .light-theme) */
+    body.light-theme {{ background: #f5f5f5; color: #1a1a1a; }}
+    body.light-theme .card {{ background: #fff; border-color: #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }}
+    body.light-theme h1, body.light-theme h2 {{ color: #111; }}
+    body.light-theme .meta, body.light-theme .small, body.light-theme .kpi .label {{ color: #555; }}
+    body.light-theme .kpi {{ background: #f9f9f9; border-color: #ddd; }}
+    body.light-theme .kpi .value {{ color: #111; }}
+    body.light-theme table {{ color: #1a1a1a; }}
+    body.light-theme th {{ color: #333; }}
+    body.light-theme .theme-toggle button {{ background: #e5e5e5; color: #1a1a1a; border-color: #ccc; }}
+    body.light-theme .theme-toggle button:hover {{ background: #d5d5d5; }}
+    body.light-theme .screenshot-row {{ background: #f5f5f5; }}
+    body.light-theme .screenshot-row .screenshot-label {{ color: #555; }}
+
+    /* Print: always light background and dark text for visibility */
     @media print {{
-      body {{ background: #fff !important; color: #111 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-      .card {{ background: #fff !important; border-color: #333 !important; box-shadow: none !important; color: #111 !important; }}
-      .card * {{ color: #111 !important; }}
+      body, body.light-theme {{ background: #fff !important; color: #111 !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+      .card, .card * {{ color: #111 !important; background: transparent !important; }}
+      .card {{ background: #fff !important; border: 1px solid #333 !important;
+        box-shadow: none !important; }}
       h1, h2 {{ color: #111 !important; }}
-      .meta, .small, .kpi .label {{ color: #444 !important; }}
-      .kpi {{ background: #f5f5f5 !important; border-color: #ccc !important; color: #111 !important; }}
+      .meta, .small, .kpi .label, .screenshot-label {{ color: #333 !important; }}
+      .kpi {{ background: #f5f5f5 !important; border: 1px solid #ccc !important; color: #111 !important; }}
       .kpi .value {{ color: #111 !important; }}
       table, th, td {{ color: #111 !important; border-color: #333 !important; }}
       td {{ border-bottom-color: #ddd !important; }}
-      body > p {{ color: #444 !important; }}
+      .theme-toggle {{ display: none !important; }}
+      body > p, .footer-note {{ color: #333 !important; }}
+      .source-line {{ color: #111 !important; }}
+      .screenshot-row {{ background: #f5f5f5 !important; }}
+      .screenshot-row .screenshot-label {{ color: #111 !important; }}
+      img {{ border-color: #999 !important; }}
     }}
   </style>
 </head>
 <body>
+  <div class="theme-toggle">
+    <button type="button" onclick="document.body.classList.toggle('light-theme'); this.textContent = document.body.classList.contains('light-theme') ? 'Dark' : 'Light'; if (window.updateChartTheme) window.updateChartTheme();" aria-label="Toggle light/dark theme">Light</button>
+  </div>
   <div class="card">
     <h1>{title}</h1>
     <div class="meta">This report is intended to be a quick overview of the test results. For detailed test results, please view the original xcresult bundle.</div>
@@ -629,7 +662,7 @@ def build_html(
       <div class="kpi"><div class="label">Skipped</div><div class="value">{skipped}</div></div>
     </div>
     <canvas id="pie" width="520" height="320"></canvas>
-    <div class="small">Source: {source_name}</div>
+    <div class="small source-line">Source: {source_name}</div>
   </div>"""  # Header and summary card
 
     # Append optional details section.
@@ -682,9 +715,9 @@ def build_html(
                             break
                 if imgs:
                     colspan = 4 if has_failures else 3
-                    html += f"""        <tr>
-          <td colspan="{colspan}" style="border-bottom:1px solid #404040; padding:8px 6px; background:#1f1f1f;">
-            <div style="font-size:11px; color:#9ca3af; margin-bottom:4px;">Screenshots</div>
+                    html += f"""        <tr class="screenshot-row">
+          <td colspan="{colspan}" style="border-bottom:1px solid #404040; padding:8px 6px;">
+            <div class="screenshot-label" style="font-size:11px; margin-bottom:4px;">Screenshots</div>
             <div style="display:flex; flex-wrap:wrap; gap:8px;">"""
                     for fn in imgs[:10]:
                         src = f"{screenshot_dir_relative}/{fn}"
@@ -701,13 +734,14 @@ def build_html(
 """
 
     # Close the document (Chart.js script: must interpolate passed/failed/skipped).
+    # Chart is stored so beforeprint can redraw legend with dark text for printing.
     html += f"""
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     Chart.defaults.color = '#d1d5db';
     Chart.defaults.borderColor = '#404040';
     const ctx = document.getElementById('pie');
-    new Chart(ctx, {{
+    const pieChart = new Chart(ctx, {{
       type: 'pie',
       data: {{
         labels: ['Passed', 'Failed', 'Skipped'],
@@ -721,10 +755,27 @@ def build_html(
         plugins: {{ legend: {{ position: 'bottom', labels: {{ color: '#d1d5db' }} }}, title: {{ display: false }} }}
       }}
     }});
+    function getLegendColor() {{
+      return document.body.classList.contains('light-theme') ? '#333' : '#d1d5db';
+    }}
+    window.addEventListener('beforeprint', function() {{
+      pieChart.options.plugins.legend.labels.color = '#111';
+      pieChart.update();
+    }});
+    window.addEventListener('afterprint', function() {{
+      pieChart.options.plugins.legend.labels.color = getLegendColor();
+      pieChart.update();
+    }});
+    window.updateChartTheme = function() {{
+      if (typeof pieChart !== 'undefined' && pieChart.options.plugins.legend.labels) {{
+        pieChart.options.plugins.legend.labels.color = getLegendColor();
+        pieChart.update();
+      }}
+    }};
   </script>
   <hr style="border: none; border-top: 1px solid #404040; margin: 24px 0 0 0;" />
   <br /><br /><br />
-  <p style="color: #6b7280; font-size: 12px; margin: 0;">This was built with passion</p>
+  <p class="footer-note" style="color: #6b7280; font-size: 12px; margin: 0;">This was built with passion</p>
 </body>
 </html>
 """
