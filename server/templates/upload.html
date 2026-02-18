@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>XCResult Report</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      margin: 0; padding: 0;
+      background: #111; color: #e0e0e0;
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh;
+    }
+    .container { width: 100%; max-width: 540px; padding: 20px; }
+    .card {
+      background: #1e1e1e; border: 1px solid #333; border-radius: 14px;
+      padding: 32px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; color: #fff; }
+    .subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
+    label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+    input[type="text"] {
+      width: 100%; padding: 10px 12px; border: 1px solid #333; border-radius: 8px;
+      background: #2a2a2a; color: #fff; font-size: 14px; outline: none;
+      transition: border-color .15s;
+    }
+    input[type="text"]:focus { border-color: #4a9eff; }
+    .field { margin-bottom: 18px; }
+
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 20px 0; font-size: 12px; color: #555;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: #333;
+    }
+
+    .drop-zone {
+      border: 2px dashed #444; border-radius: 12px; padding: 28px 16px;
+      text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #4a9eff; background: rgba(74,158,255,0.06);
+    }
+    .drop-zone p { margin: 0 0 4px; font-size: 14px; color: #ccc; }
+    .drop-zone .hint { font-size: 12px; color: #666; }
+    .drop-zone .filename { font-size: 13px; color: #4a9eff; margin-top: 8px; word-break: break-all; }
+    .drop-zone input[type="file"] { display: none; }
+
+    .checkbox-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 20px; font-size: 13px; color: #aaa;
+    }
+    .checkbox-row input[type="checkbox"] { accent-color: #4a9eff; }
+
+    button[type="submit"] {
+      width: 100%; padding: 12px; border: none; border-radius: 10px;
+      background: #4a9eff; color: #fff; font-size: 15px; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    button[type="submit"]:hover { background: #3a8eef; }
+    button[type="submit"]:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+    .flash {
+      background: #3a1c1c; border: 1px solid #6b2c2c; color: #f87171;
+      border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px;
+    }
+    .spinner { display: none; margin-top: 12px; text-align: center; }
+    .spinner.active { display: block; }
+    .spinner::after {
+      content: ''; display: inline-block; width: 22px; height: 22px;
+      border: 3px solid #333; border-top-color: #4a9eff; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer { text-align: center; margin-top: 16px; font-size: 11px; color: #444; }
+    .path-hint { font-size: 11px; color: #555; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for msg in messages %}
+          <div class="flash">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card">
+      <h1>XCResult Report</h1>
+      <p class="subtitle">Generate an HTML test report from an Xcode .xcresult bundle.</p>
+
+      <form method="post" action="/upload" enctype="multipart/form-data" id="uploadForm">
+
+        <div class="field">
+          <label for="local_path">Path to .xcresult on this Mac</label>
+          <input type="text" id="local_path" name="local_path"
+                 placeholder="/path/to/YourTests.xcresult" autocomplete="off" />
+          <div class="path-hint">Tip: drag the .xcresult from Finder into this field to paste its path.</div>
+        </div>
+
+        <div class="divider">or upload a zip</div>
+
+        <div class="drop-zone" id="dropZone">
+          <p>Drag and drop a zipped .xcresult here</p>
+          <span class="hint">or click to browse (.zip only; browsers cannot upload folders)</span>
+          <div class="filename" id="fileName"></div>
+          <input type="file" name="file" id="fileInput" accept=".zip" />
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="field">
+          <label for="title">Report title (optional)</label>
+          <input type="text" id="title" name="title" placeholder="XCTest Summary" />
+        </div>
+
+        <div class="checkbox-row">
+          <input type="checkbox" id="include_details" name="include_details" />
+          <label for="include_details" style="margin:0;">Include detailed test list</label>
+        </div>
+
+        <button type="submit" id="submitBtn" disabled>Generate Report</button>
+        <div class="spinner" id="spinner"></div>
+      </form>
+    </div>
+    <div class="footer">XCResult Report Server &middot; macOS</div>
+  </div>
+
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+    const submitBtn = document.getElementById('submitBtn');
+    const spinner = document.getElementById('spinner');
+    const form = document.getElementById('uploadForm');
+    const localPath = document.getElementById('local_path');
+
+    function updateSubmit() {
+      const hasPath = localPath.value.trim().length > 0;
+      const hasFile = fileInput.files && fileInput.files.length > 0;
+      submitBtn.disabled = !(hasPath || hasFile);
+    }
+
+    localPath.addEventListener('input', updateSubmit);
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        onFileSelected();
+      }
+    });
+
+    fileInput.addEventListener('change', onFileSelected);
+
+    function onFileSelected() {
+      if (fileInput.files.length) {
+        fileName.textContent = fileInput.files[0].name;
+        updateSubmit();
+      }
+    }
+
+    form.addEventListener('submit', () => {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Processing\u2026';
+      spinner.classList.add('active');
+    });
+  </script>
+</body>
+</html>

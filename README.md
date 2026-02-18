@@ -10,6 +10,7 @@ Python GUI and CLI for turning Xcode `.xcresult` bundles into HTML test reports.
 - [Usage](#usage)
   - [GUI mode](#gui-mode)
   - [CLI mode](#cli-mode)
+  - [Web server](#web-server)
 - [Dependencies](#dependencies)
 - [Distributing to another Mac](#distributing-to-another-mac)
 - [Notes](#notes)
@@ -20,6 +21,7 @@ Python GUI and CLI for turning Xcode `.xcresult` bundles into HTML test reports.
 - Generates an HTML summary page with a Chart.js pie chart (dark theme by default; light/dark toggle in report)
 - Optional PDF export via WeasyPrint
 - Tkinter-based GUI with optional drag-and-drop via `tkinterdnd2`
+- Web server mode: upload `.xcresult` bundles from any browser on your Mac or LAN
 - Print-friendly: report uses readable text and light background when printing
 
 ## Prerequisites
@@ -93,11 +95,23 @@ Options:
 
 Exit codes: `0` on success, non-zero on error.
 
+### Web server
+
+A Flask-based web server lets you upload zipped `.xcresult` bundles from any browser (same Mac or LAN). Install the extra dependency and start the server:
+
+```bash
+pip install -r server/requirements.txt
+python3 server/app.py
+```
+
+Then open `http://127.0.0.1:5050` in your browser. For LAN access use `--host 0.0.0.0`. See [`server/README.md`](server/README.md) for full setup and usage details.
+
 ## Dependencies
 
-- **tkinter** – included with Python on macOS (used for the GUI).
-- **tkinterdnd2** – optional; enables drag-and-drop in the GUI. Install with `pip install tkinterdnd2`.
-- **weasyprint** – optional; enables PDF export from HTML. Install with `pip install weasyprint` (may require extra system libraries).
+- **tkinter** -- included with Python on macOS (used for the GUI).
+- **tkinterdnd2** -- optional; enables drag-and-drop in the GUI. Install with `pip install tkinterdnd2`.
+- **weasyprint** -- optional; enables PDF export from HTML. Install with `pip install weasyprint` (may require extra system libraries).
+- **flask** -- required only for the web server (`pip install -r server/requirements.txt`).
 
 ## Distributing to another Mac
 
