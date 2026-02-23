@@ -52,6 +52,7 @@ code if an error occurs.
 # © Marius N 2026
 
 import argparse
+import html
 import json
 import datetime
 import os
@@ -159,6 +160,9 @@ def _process_xcresult_to_html(
     report_title: Optional[str] = None,
     include_details: bool = False,
     include_screenshots: bool = False,
+    run_by: Optional[str] = None,
+    run_at: Optional[str] = None,
+    version: Optional[str] = None,
 ) -> Tuple[int, int, int]:
     """Shared helper to run xcresulttool, extract counts, and write HTML+JSON.
 
@@ -205,12 +209,11 @@ def _process_xcresult_to_html(
     if passed == 0 and failed == 0 and skipped == 0:
         _log(log_path, "[counts] WARNING: All counts are zero. JSON structure may not match expected patterns.")
 
-    # Detailed path: only from same summary JSON (e.g. testFailures). Does not affect counts.
     details = None
     screenshot_dir_relative = None
     screenshot_map = None
     if include_details:
-        details = _extract_details_from_summary(data, log_path)
+        details = _extract_details(xcresult_path, data, log_path)
         if details and include_screenshots:
             screenshot_dir_relative, screenshot_map = _export_attachments(xcresult_path, out_html_path, log_path)
             if not screenshot_map:
@@ -222,6 +225,9 @@ def _process_xcresult_to_html(
         passed, failed, skipped, Path(xcresult_path).name, title, details,
         screenshot_dir_relative=screenshot_dir_relative,
         screenshot_map=screenshot_map,
+        run_by=run_by,
+        run_at=run_at,
+        version=version,
     )
     _log(log_path, f"[html] Generated HTML length: {len(html)} bytes")
     _log(log_path, f"[html] HTML contains 'chart.js': {'chart.js' in html.lower()}")
@@ -251,6 +257,9 @@ def run_cli(
     report_title: Optional[str] = None,
     include_details: bool = False,
     include_screenshots: bool = False,
+    run_by: Optional[str] = None,
+    run_at: Optional[str] = None,
+    version: Optional[str] = None,
 ) -> int:
     """Run the tool in CLI mode.
 
@@ -271,6 +280,9 @@ def run_cli(
             report_title=report_title,
             include_details=include_details,
             include_screenshots=include_screenshots,
+            run_by=run_by,
+            run_at=run_at,
+            version=version,
         )
     except Exception as exc:
         _log(resolved_log_path, f"[cli] error: {exc}")
@@ -443,18 +455,82 @@ def extract_counts(data: dict) -> Tuple[int, int, int]:
     return 0, 0, 0
 
 
-def _extract_details_from_summary(data: dict, log_path: str) -> Optional[list]:
-    """Extract test details only from summary-format JSON (e.g. testFailures).
-
-    Does not touch full bundle format. Returns a list of dicts with name, status,
-    suite, and optional failure; or None if nothing found.
-    """
-    if not isinstance(data, dict):
+def _run_xcresulttool_tests(xcresult_path: str) -> Optional[str]:
+    """Run `xcresulttool get test-results tests` to get every test case with its result."""
+    xcresult_path = os.path.abspath(xcresult_path)
+    xcrun_path = shutil.which("xcrun") or "/usr/bin/xcrun"
+    cmd = [xcrun_path, "xcresulttool", "get", "test-results", "tests",
+           "--path", xcresult_path, "--compact"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    except Exception:
         return None
+    if result.returncode == 0 and (result.stdout or "").strip():
+        return result.stdout
+    return None
+
+
+def _collect_test_cases(nodes: list, suite: str = "") -> list:
+    """Recursively walk testNodes and collect leaf Test Case entries."""
+    results = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_type = node.get("nodeType", "")
+        name = node.get("name", "")
+        children = node.get("children") or []
+
+        if node_type == "Test Case":
+            status = node.get("result", "unknown")
+            duration = node.get("duration", "")
+            node_id = node.get("nodeIdentifier") or node.get("nodeIdentifierURL") or ""
+            failure_text = ""
+            for child in children:
+                if isinstance(child, dict) and child.get("nodeType") == "Failure Message":
+                    failure_text = (child.get("name") or "")[:100]
+                    break
+            results.append({
+                "name": name,
+                "status": status,
+                "suite": suite,
+                "duration": duration,
+                "failure": failure_text,
+                "testIdentifierString": node_id,
+            })
+        elif children:
+            current_suite = name if node_type == "Test Suite" else suite
+            results.extend(_collect_test_cases(children, current_suite))
+    return results
+
+
+def _extract_details(xcresult_path: str, summary_data: dict, log_path: str) -> Optional[list]:
+    """Extract a full test list (passed, failed, skipped) from the xcresult bundle.
+
+    Tries `xcresulttool get test-results tests` first for the complete list.
+    Falls back to summary-only data (testFailures) if the tests command is unavailable.
+    """
+    if not isinstance(summary_data, dict):
+        return None
+
+    _log(log_path, "[details] Attempting full test list via xcresulttool tests command")
+    tests_json = _run_xcresulttool_tests(xcresult_path)
+    if tests_json:
+        try:
+            tests_data = json.loads(tests_json)
+            test_nodes = tests_data.get("testNodes") or []
+            details = _collect_test_cases(test_nodes)
+            _log(log_path, f"[details] Found {len(details)} test cases from tests command")
+            if details:
+                status_order = {"Failed": 0, "Expected Failure": 1, "Skipped": 2, "Passed": 3, "unknown": 4}
+                details.sort(key=lambda d: (status_order.get(d["status"], 5), d.get("suite", ""), d.get("name", "")))
+                return details
+        except Exception as exc:
+            _log(log_path, f"[details] Failed to parse tests JSON: {exc}")
+
+    _log(log_path, "[details] Falling back to summary-only (testFailures)")
     details = []
-    _log(log_path, "[details] Extracting from summary JSON only (testFailures)")
-    if "testFailures" in data and isinstance(data["testFailures"], list):
-        for failure in data["testFailures"]:
+    if "testFailures" in summary_data and isinstance(summary_data["testFailures"], list):
+        for failure in summary_data["testFailures"]:
             if not isinstance(failure, dict):
                 continue
             test_name = failure.get("testName") or failure.get("testIdentifierString") or ""
@@ -475,7 +551,7 @@ def _extract_details_from_summary(data: dict, log_path: str) -> Optional[list]:
                 })
         _log(log_path, f"[details] Found {len(details)} failed tests from testFailures")
     else:
-        _log(log_path, "[details] No testFailures in summary (or not a list); detailed list will be empty")
+        _log(log_path, "[details] No testFailures in summary")
     return details if details else None
 
 
@@ -570,14 +646,23 @@ def build_html(
     details: Optional[list] = None,
     screenshot_dir_relative: Optional[str] = None,
     screenshot_map: Optional[Dict[str, List[str]]] = None,
+    run_by: Optional[str] = None,
+    run_at: Optional[str] = None,
+    version: Optional[str] = None,
 ) -> str:
     """Construct an HTML report containing test counts, a pie chart, optional details, and optional screenshots.
 
-    The pie chart is drawn via Chart.js loaded from a CDN.  The layout uses
-    simple CSS for readability.  The source filename is displayed at the bottom.
+    run_by, run_at, version: optional metadata shown on the first page when set.
     screenshot_map: testIdentifier or testIdentifierURL -> list of exported filenames (in screenshot_dir_relative).
     """
     total = passed + failed + skipped
+    run_by = (run_by or "").strip()
+    run_at = (run_at or "").strip()
+    version = (version or "").strip()
+    has_meta = bool(run_by or run_at or version)
+    run_by_esc = html.escape(run_by) if run_by else ""
+    run_at_esc = html.escape(run_at) if run_at else ""
+    version_esc = html.escape(version) if version else ""
     # Use f-string to embed numbers; Chart.js will read these values.
     html = f"""<!doctype html>
 <html lang="en">
@@ -602,6 +687,11 @@ def build_html(
     .kpi .label {{ color: #9ca3af; font-size: 12px; }}
     .kpi .value {{ font-size: 20px; margin-top: 6px; color: #fff; }}
     .small {{ color: #9ca3af; font-size: 12px; margin-top: 10px; }}
+    .report-meta {{ margin: 12px 0 16px; padding: 10px 14px; background: #1f1f1f; border-radius: 8px; border: 1px solid #3a3a3a; }}
+    .report-meta-row {{ font-size: 13px; display: flex; gap: 10px; margin-bottom: 4px; }}
+    .report-meta-row:last-child {{ margin-bottom: 0; }}
+    .report-meta-label {{ color: #9ca3af; min-width: 72px; }}
+    .report-meta-value {{ color: #e0e0e0; }}
     canvas {{ max-width: 520px; margin: auto; }}
     table {{ color: #e0e0e0; }}
     th {{ color: #d1d5db; }}
@@ -625,6 +715,9 @@ def build_html(
     body.light-theme .theme-toggle button:hover {{ background: #d5d5d5; }}
     body.light-theme .screenshot-row {{ background: #f5f5f5; }}
     body.light-theme .screenshot-row .screenshot-label {{ color: #555; }}
+    body.light-theme .report-meta {{ background: #f5f5f5; border-color: #ddd; }}
+    body.light-theme .report-meta-label {{ color: #555; }}
+    body.light-theme .report-meta-value {{ color: #111; }}
 
     /* Print: always light background and dark text for visibility */
     @media print {{
@@ -642,6 +735,9 @@ def build_html(
       .theme-toggle {{ display: none !important; }}
       body > p, .footer-note {{ color: #333 !important; }}
       .source-line {{ color: #111 !important; }}
+      .report-meta {{ background: #f5f5f5 !important; border-color: #ccc !important; }}
+      .report-meta-label {{ color: #333 !important; }}
+      .report-meta-value {{ color: #111 !important; }}
       .screenshot-row {{ background: #f5f5f5 !important; }}
       .screenshot-row .screenshot-label {{ color: #111 !important; }}
       img {{ border-color: #999 !important; }}
@@ -654,8 +750,23 @@ def build_html(
   </div>
   <div class="card">
     <h1>{title}</h1>
-    <div class="meta">This report is intended to be a quick overview of the test results. For detailed test results, please view the original xcresult bundle.</div>
-    <div class="grid">
+    <div class="meta">This report is intended to be a quick overview of the test results. For detailed test results, please view the original xcresult bundle.</div>"""
+    if has_meta:
+        html += """
+    <div class="report-meta">
+"""
+        if run_by:
+            html += f"""      <div class="report-meta-row"><span class="report-meta-label">Run by</span><span class="report-meta-value">{run_by_esc}</span></div>
+"""
+        if run_at:
+            html += f"""      <div class="report-meta-row"><span class="report-meta-label">Ran</span><span class="report-meta-value">{run_at_esc}</span></div>
+"""
+        if version:
+            html += f"""      <div class="report-meta-row"><span class="report-meta-label">Version</span><span class="report-meta-value">{version_esc}</span></div>
+"""
+        html += """    </div>
+"""
+    html += f"""    <div class="grid">
       <div class="kpi"><div class="label">Total</div><div class="value">{total}</div></div>
       <div class="kpi"><div class="label">Passed</div><div class="value">{passed}</div></div>
       <div class="kpi"><div class="label">Failed</div><div class="value">{failed}</div></div>
@@ -669,7 +780,8 @@ def build_html(
     if details:
         has_screenshots = bool(screenshot_dir_relative and screenshot_map)
         has_failures = any(item.get("failure") for item in details)
-        meta_note = "Screenshots included below when available." if has_screenshots else "Best-effort list of tests discovered in the xcresult summary. Screenshots and other rich attachments are not included."
+        has_durations = any(item.get("duration") for item in details)
+        meta_note = "Screenshots included below when available." if has_screenshots else "All test cases extracted from the xcresult bundle."
         html += f"""
   <div class="card" style="margin-top:24px;">
     <h2>Test details</h2>
@@ -680,6 +792,9 @@ def build_html(
           <th style="text-align:left; border-bottom:1px solid #404040; padding:6px;">Test</th>
           <th style="text-align:left; border-bottom:1px solid #404040; padding:6px;">Suite</th>
           <th style="text-align:left; border-bottom:1px solid #404040; padding:6px;">Status</th>"""
+        if has_durations:
+            html += """
+          <th style="text-align:left; border-bottom:1px solid #404040; padding:6px;">Duration</th>"""
         if has_failures:
             html += """
           <th style="text-align:left; border-bottom:1px solid #404040; padding:6px;">Failure</th>"""
@@ -688,17 +803,27 @@ def build_html(
       </thead>
       <tbody>
 """
+        status_colors = {
+            "Failed": "#ef4444",
+            "Passed": "#22c55e",
+            "Skipped": "#f59e0b",
+            "Expected Failure": "#f59e0b",
+        }
         for item in details:
             name = item.get("name", "")
             suite = item.get("suite", "")
             status = item.get("status", "")
+            duration = item.get("duration", "")
             failure = item.get("failure", "")
             test_id = item.get("testIdentifierString", "")
-            status_color = "#ef4444" if status == "Failed" else "#22c55e" if status == "Passed" else "#f59e0b"
+            status_color = status_colors.get(status, "#9ca3af")
             html += f"""        <tr>
           <td style="border-bottom:1px solid #404040; padding:4px 6px;">{name}</td>
           <td style="border-bottom:1px solid #404040; padding:4px 6px;">{suite}</td>
           <td style="border-bottom:1px solid #404040; padding:4px 6px; color:{status_color}; font-weight:bold;">{status}</td>"""
+            if has_durations:
+                html += f"""
+          <td style="border-bottom:1px solid #404040; padding:4px 6px; font-size:12px; color:#9ca3af;">{duration}</td>"""
             if has_failures:
                 html += f"""
           <td style="border-bottom:1px solid #404040; padding:4px 6px; font-size:12px; color:#9ca3af;">{failure}</td>"""
@@ -714,7 +839,7 @@ def build_html(
                             imgs = screenshot_map[key]
                             break
                 if imgs:
-                    colspan = 4 if has_failures else 3
+                    colspan = 3 + (1 if has_durations else 0) + (1 if has_failures else 0)
                     html += f"""        <tr class="screenshot-row">
           <td colspan="{colspan}" style="border-bottom:1px solid #404040; padding:8px 6px;">
             <div class="screenshot-label" style="font-size:11px; margin-bottom:4px;">Screenshots</div>
@@ -1113,6 +1238,9 @@ def main(argv=None):
         action="store_true",
         help="Include exported screenshots in the report (only with --include-details).",
     )
+    parser.add_argument("--run-by", help="Who ran the tests (shown on report).")
+    parser.add_argument("--run-at", help="When the tests ran (e.g. date/time, shown on report).")
+    parser.add_argument("--version", help="Version/build the tests ran against (shown on report).")
 
     args = parser.parse_args(argv)
 
@@ -1128,6 +1256,9 @@ def main(argv=None):
             report_title=args.title,
             include_details=bool(args.include_details),
             include_screenshots=bool(args.include_screenshots) if args.include_details else False,
+            run_by=args.run_by,
+            run_at=args.run_at,
+            version=args.version,
         )
         raise SystemExit(exit_code)
 

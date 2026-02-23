@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>XCResult Report Generator</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='xctest_result.png') }}" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
   <style>
@@ -29,6 +30,9 @@
     }
     input[type="text"]:focus { border-color: #4a9eff; }
     .field { margin-bottom: 18px; }
+    .meta-fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+    .meta-fields .meta-field { margin-bottom: 0; }
+    @media (max-width: 480px) { .meta-fields { grid-template-columns: 1fr; } }
 
     .divider {
       display: flex; align-items: center; gap: 12px;
@@ -80,7 +84,10 @@
     .footer { text-align: center; margin-top: 16px; font-size: 11px; color: #444; }
 
     .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-    .header-row h1 { flex: 1; }
+    .header-logo { width: 48px; height: 48px; flex-shrink: 0; border-radius: 8px; }
+    .header-text { flex: 1; min-width: 0; }
+    .header-text .subtitle { margin-bottom: 0; }
+    .header-row h1 { margin: 0 0 4px; }
     .info-btn {
       flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
       border: 1px solid #444; background: #2a2a2a; color: #888;
@@ -107,24 +114,26 @@
       font-size: 18px; cursor: pointer; line-height: 1; padding: 0;
     }
     .modal-close:hover { background: #333; color: #fff; }
+    .modal-title { margin: 0 0 12px; padding: 20px 20px 0 20px; font-size: 18px; color: #fff; text-align: center; }
+    .modal-body { padding: 12px 20px 20px; color: #ccc; font-size: 14px; line-height: 1.5; text-align: center; }
+    .modal-body .why { margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; color: #9ca3af; font-size: 13px; text-align: center; }
+    .modal-body .why strong { color: #e0e0e0; }
+    .modal-body code { background: #2a2a2a; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
   </style>
 </head>
 <body>
   <div class="container">
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        {% for msg in messages %}
-          <div class="flash">{{ msg }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
+    <div class="flash" id="flashBanner" style="display: none;"></div>
 
     <div class="card">
       <div class="header-row">
-        <h1>XCResult Report Generator</h1>
+        <img src="{{ url_for('static', filename='xctest_result.png') }}" alt="" class="header-logo" />
+        <div class="header-text">
+          <h1>XCResult Report Generator</h1>
+          <p class="subtitle">Generate an HTML test report from an Xcode .xcresult bundle.</p>
+        </div>
         <button type="button" class="info-btn" id="infoBtn" title="How to use">i</button>
       </div>
-      <p class="subtitle">Generate an HTML test report from an Xcode .xcresult bundle.</p>
 
       <form method="post" action="/upload" enctype="multipart/form-data" id="uploadForm">
 
@@ -132,7 +141,7 @@
           <p>Drag and drop a zipped .xcresult here</p>
           <span class="hint">or click to browse (.zip only; browsers cannot upload folders)</span>
           <div class="filename" id="fileName"></div>
-          <input type="file" name="file" id="fileInput" accept=".zip" />
+          <input type="file" name="file" id="fileInput" accept=".zip,.xcresult" />
         </div>
 
         <div class="divider"></div>
@@ -140,6 +149,21 @@
         <div class="field">
           <label for="title">Report title (optional)</label>
           <input type="text" id="title" name="title" placeholder="XCTest Summary" />
+        </div>
+
+        <div class="meta-fields">
+          <div class="field meta-field">
+            <label for="run_by">Who ran it (optional)</label>
+            <input type="text" id="run_by" name="run_by" placeholder="e.g. CI, developer name" />
+          </div>
+          <div class="field meta-field">
+            <label for="run_at">When it ran (optional)</label>
+            <input type="text" id="run_at" name="run_at" placeholder="e.g. 2026-02-23 17:00" />
+          </div>
+          <div class="field meta-field">
+            <label for="version">Against which version (optional)</label>
+            <input type="text" id="version" name="version" placeholder="e.g. 1.2.3, build 42" />
+          </div>
         </div>
 
         <div class="checkbox-row">
@@ -163,13 +187,60 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="helpModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="helpModalClose" aria-label="Close">&times;</button>
+      <h2 class="modal-title" id="helpModalTitle">Something went wrong</h2>
+      <div class="modal-body" id="helpModalBody"></div>
+    </div>
+  </div>
+
   <script>
+    window.flashedMessages = [
+      {% for cat, msg in get_flashed_messages(with_categories=True) %}
+      { "category": {{ (cat or 'message')|tojson }}, "text": {{ msg|tojson }} }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ];
+
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     const fileName = document.getElementById('fileName');
     const submitBtn = document.getElementById('submitBtn');
     const spinner = document.getElementById('spinner');
     const form = document.getElementById('uploadForm');
+    const helpModal = document.getElementById('helpModal');
+    const helpModalTitle = document.getElementById('helpModalTitle');
+    const helpModalBody = document.getElementById('helpModalBody');
+
+    function escapeHtml(s) {
+      var d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+    function showHelpModal(title, message, whyText, whyIsHtml) {
+      helpModalTitle.textContent = title;
+      var body = '<p>' + escapeHtml(message) + '</p>';
+      if (whyText) {
+        body += '<div class="why"><strong>Why this happens / What to do:</strong><br>' + (whyIsHtml ? whyText : escapeHtml(whyText)) + '</div>';
+      }
+      helpModalBody.innerHTML = body;
+      helpModal.classList.add('active');
+      helpModal.setAttribute('aria-hidden', 'false');
+    }
+    function closeHelpModal() {
+      helpModal.classList.remove('active');
+      helpModal.setAttribute('aria-hidden', 'true');
+    }
+
+    if (window.flashedMessages && window.flashedMessages.length > 0) {
+      var main = window.flashedMessages.find(function(m) { return m.category !== 'explanation'; }) || window.flashedMessages[0];
+      var explanation = window.flashedMessages.find(function(m) { return m.category === 'explanation'; });
+      showHelpModal('Something went wrong', main.text, explanation ? explanation.text : null, true);
+    }
+
+    document.getElementById('helpModalClose').addEventListener('click', closeHelpModal);
+    helpModal.addEventListener('click', function(e) { if (e.target === helpModal) closeHelpModal(); });
+
     function updateSubmit() {
       const hasFile = fileInput.files && fileInput.files.length > 0;
       submitBtn.disabled = !hasFile;
@@ -194,7 +265,24 @@
 
     function onFileSelected() {
       if (fileInput.files.length) {
-        fileName.textContent = fileInput.files[0].name;
+        const name = fileInput.files[0].name;
+        if (name.endsWith('.xcresult')) {
+          fileName.textContent = '';
+          fileInput.value = '';
+          showHelpModal(
+            'Cannot upload .xcresult directly',
+            'You selected a .xcresult bundle. The server cannot accept it as a single file.',
+            'A .xcresult is a folder that contains the test results.<br>' +
+            'Browsers cannot upload folders.<br>' +
+            'Right-click it in Finder and choose <strong>Compress</strong> to create a .zip file,<br>' +
+            'or in Terminal run: <code>zip -r MyTests.zip MyTests.xcresult</code><br>' +
+            'Then upload the resulting .zip file.',
+            true
+          );
+          updateSubmit();
+          return;
+        }
+        fileName.textContent = name;
         updateSubmit();
       }
     }
@@ -204,6 +292,13 @@
       submitBtn.textContent = 'Processing\u2026';
       spinner.classList.add('active');
     });
+
+    function resetProcessingState() {
+      submitBtn.textContent = 'Generate Report';
+      spinner.classList.remove('active');
+      updateSubmit();
+    }
+    window.addEventListener('pageshow', resetProcessingState);
 
     const infoBtn = document.getElementById('infoBtn');
     const infoModal = document.getElementById('infoModal');
@@ -218,7 +313,12 @@
     }
     modalClose.addEventListener('click', closeModal);
     infoModal.addEventListener('click', (e) => { if (e.target === infoModal) closeModal(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeModal();
+        closeHelpModal();
+      }
+    });
   </script>
 </body>
 </html>

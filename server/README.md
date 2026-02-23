@@ -146,6 +146,7 @@ Uploaded bundles are saved to the OS temp directory and cleaned up after process
 - Use `--cert` and `--key` to serve over **HTTPS** (encrypted). Self-signed certificates are fine for local/LAN; the browser will prompt you to accept the cert once.
 - There is no authentication. Do not expose the server to the public internet without adding auth (and HTTPS).
 - File uploads are capped at 2 GB.
+- **Do not run a generic file server** (e.g. `python -m http.server`) in a directory that contains `.xcresult` bundles. That would expose bundle contents (e.g. Index of .../something.xcresult/). Use only this application for report generation and serving.
 
 ---
 
