@@ -54,6 +54,7 @@ code if an error occurs.
 import argparse
 import html
 import json
+import re
 import datetime
 import os
 import random
@@ -209,11 +210,15 @@ def _process_xcresult_to_html(
     if passed == 0 and failed == 0 and skipped == 0:
         _log(log_path, "[counts] WARNING: All counts are zero. JSON structure may not match expected patterns.")
 
+    tests_json = _run_xcresulttool_tests(xcresult_path)
+    device_str = _format_devices_from_tests_json(tests_json) if tests_json else None
+    run_at_display = (run_at or "").strip() or _get_run_date_from_filename(Path(xcresult_path).name)
+
     details = None
     screenshot_dir_relative = None
     screenshot_map = None
     if include_details:
-        details = _extract_details(xcresult_path, data, log_path)
+        details = _extract_details(xcresult_path, data, log_path, tests_json=tests_json)
         if details and include_screenshots:
             screenshot_dir_relative, screenshot_map = _export_attachments(xcresult_path, out_html_path, log_path)
             if not screenshot_map:
@@ -226,8 +231,9 @@ def _process_xcresult_to_html(
         screenshot_dir_relative=screenshot_dir_relative,
         screenshot_map=screenshot_map,
         run_by=run_by,
-        run_at=run_at,
+        run_at=run_at_display,
         version=version,
+        device=device_str,
     )
     _log(log_path, f"[html] Generated HTML length: {len(html)} bytes")
     _log(log_path, f"[html] HTML contains 'chart.js': {'chart.js' in html.lower()}")
@@ -470,6 +476,51 @@ def _run_xcresulttool_tests(xcresult_path: str) -> Optional[str]:
     return None
 
 
+def _get_run_date_from_filename(name: str) -> Optional[str]:
+    """Try to extract run date/time from xcresult filename. Returns formatted string or None."""
+    # Common: MyTests-2026.02.16_18-25-26-+0200.xcresult or ...-2026-02-16_18-25-26.xcresult
+    m = re.search(r"(\d{4})[.-](\d{2})[.-](\d{2})[_\-](\d{2})[-](\d{2})[-](\d{2})", name)
+    if m:
+        y, mo, d, h, mi, s = m.groups()
+        try:
+            dt = datetime.datetime(int(y), int(mo), int(d), int(h), int(mi), int(s))
+            return dt.strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            pass
+    # Shorter: 20260216_182526 or 2026-02-16_18-25
+    m = re.search(r"(\d{4})(\d{2})(\d{2})[_\-](\d{2})[-]?(\d{2})[-]?(\d{2})?", name)
+    if m:
+        y, mo, d, h, mi, s = m.groups()
+        s = s or "0"
+        try:
+            dt = datetime.datetime(int(y), int(mo), int(d), int(h), int(mi), int(s))
+            return dt.strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            pass
+    return None
+
+
+def _format_devices_from_tests_json(tests_json: str) -> Optional[str]:
+    """Parse test-results tests JSON and return a short device string for the first device."""
+    try:
+        data = json.loads(tests_json)
+        devices = data.get("devices") or []
+        if not devices or not isinstance(devices, list):
+            return None
+        d = devices[0]
+        if not isinstance(d, dict):
+            return None
+        name = d.get("deviceName") or d.get("modelName") or ""
+        platform = (d.get("platform") or "").strip()
+        os_ver = (d.get("osVersion") or "").strip()
+        parts = [name] if name else []
+        if platform or os_ver:
+            parts.append(", ".join(x for x in [platform, os_ver] if x))
+        return " ".join(parts).strip() or None
+    except Exception:
+        return None
+
+
 def _collect_test_cases(nodes: list, suite: str = "") -> list:
     """Recursively walk testNodes and collect leaf Test Case entries."""
     results = []
@@ -503,17 +554,20 @@ def _collect_test_cases(nodes: list, suite: str = "") -> list:
     return results
 
 
-def _extract_details(xcresult_path: str, summary_data: dict, log_path: str) -> Optional[list]:
+def _extract_details(
+    xcresult_path: str, summary_data: dict, log_path: str, tests_json: Optional[str] = None
+) -> Optional[list]:
     """Extract a full test list (passed, failed, skipped) from the xcresult bundle.
 
-    Tries `xcresulttool get test-results tests` first for the complete list.
+    If tests_json is provided (e.g. from a prior call), uses it; otherwise runs xcresulttool.
     Falls back to summary-only data (testFailures) if the tests command is unavailable.
     """
     if not isinstance(summary_data, dict):
         return None
 
-    _log(log_path, "[details] Attempting full test list via xcresulttool tests command")
-    tests_json = _run_xcresulttool_tests(xcresult_path)
+    if tests_json is None:
+        _log(log_path, "[details] Attempting full test list via xcresulttool tests command")
+        tests_json = _run_xcresulttool_tests(xcresult_path)
     if tests_json:
         try:
             tests_data = json.loads(tests_json)
@@ -649,22 +703,25 @@ def build_html(
     run_by: Optional[str] = None,
     run_at: Optional[str] = None,
     version: Optional[str] = None,
+    device: Optional[str] = None,
 ) -> str:
     """Construct an HTML report containing test counts, a pie chart, optional details, and optional screenshots.
 
-    run_by, run_at, version: optional metadata shown on the first page when set.
+    run_by, run_at, version, device: optional metadata shown on the first page when set.
     screenshot_map: testIdentifier or testIdentifierURL -> list of exported filenames (in screenshot_dir_relative).
     """
     total = passed + failed + skipped
     run_by = (run_by or "").strip()
     run_at = (run_at or "").strip()
     version = (version or "").strip()
-    has_meta = bool(run_by or run_at or version)
-    run_by_esc = html.escape(run_by) if run_by else ""
+    device = (device or "").strip()
+    has_meta = bool(run_by or run_at or version or device)
+    run_by_esc = html.escape(run_by) if run_by else ""  # html = stdlib module
     run_at_esc = html.escape(run_at) if run_at else ""
     version_esc = html.escape(version) if version else ""
+    device_esc = html.escape(device) if device else ""
     # Use f-string to embed numbers; Chart.js will read these values.
-    html = f"""<!doctype html>
+    out = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -676,7 +733,7 @@ def build_html(
     body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
                 Arial, sans-serif; margin: 32px; background: #1a1a1a; color: #e0e0e0; }}
     .card {{ border: 1px solid #3a3a3a; border-radius: 12px; padding: 20px;
-             max-width: 720px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); background: #2b2b2b; }}
+             max-width: 720px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); background: #2b2b2b; overflow-x: auto; }}
     h1, h2 {{ margin: 0 0 8px 0; font-size: 22px; color: #fff; }}
     h2 {{ font-size: 18px; margin-top: 4px; }}
     .meta {{ color: #9ca3af; margin-bottom: 16px; font-size: 14px; }}
@@ -693,7 +750,8 @@ def build_html(
     .report-meta-label {{ color: #9ca3af; min-width: 72px; }}
     .report-meta-value {{ color: #e0e0e0; }}
     canvas {{ max-width: 520px; margin: auto; }}
-    table {{ color: #e0e0e0; }}
+    table {{ color: #e0e0e0; table-layout: fixed; word-wrap: break-word; overflow-wrap: break-word; }}
+    th, td {{ overflow-wrap: break-word; word-break: break-word; }}
     th {{ color: #d1d5db; }}
     .theme-toggle {{ margin-bottom: 12px; }}
     .theme-toggle button {{ background: #3a3a3a; color: #e0e0e0; border: 1px solid #555;
@@ -752,21 +810,24 @@ def build_html(
     <h1>{title}</h1>
     <div class="meta">This report is intended to be a quick overview of the test results. For detailed test results, please view the original xcresult bundle.</div>"""
     if has_meta:
-        html += """
+        out += """
     <div class="report-meta">
 """
         if run_by:
-            html += f"""      <div class="report-meta-row"><span class="report-meta-label">Run by</span><span class="report-meta-value">{run_by_esc}</span></div>
+            out += f"""      <div class="report-meta-row"><span class="report-meta-label">Run by</span><span class="report-meta-value">{run_by_esc}</span></div>
 """
         if run_at:
-            html += f"""      <div class="report-meta-row"><span class="report-meta-label">Ran</span><span class="report-meta-value">{run_at_esc}</span></div>
+            out += f"""      <div class="report-meta-row"><span class="report-meta-label">Ran</span><span class="report-meta-value">{run_at_esc}</span></div>
 """
         if version:
-            html += f"""      <div class="report-meta-row"><span class="report-meta-label">Version</span><span class="report-meta-value">{version_esc}</span></div>
+            out += f"""      <div class="report-meta-row"><span class="report-meta-label">Version</span><span class="report-meta-value">{version_esc}</span></div>
 """
-        html += """    </div>
+        if device:
+            out += f"""      <div class="report-meta-row"><span class="report-meta-label">Device</span><span class="report-meta-value">{device_esc}</span></div>
 """
-    html += f"""    <div class="grid">
+        out += """    </div>
+"""
+    out += f"""    <div class="grid">
       <div class="kpi"><div class="label">Total</div><div class="value">{total}</div></div>
       <div class="kpi"><div class="label">Passed</div><div class="value">{passed}</div></div>
       <div class="kpi"><div class="label">Failed</div><div class="value">{failed}</div></div>
@@ -782,7 +843,7 @@ def build_html(
         has_failures = any(item.get("failure") for item in details)
         has_durations = any(item.get("duration") for item in details)
         meta_note = "Screenshots included below when available." if has_screenshots else "All test cases extracted from the xcresult bundle."
-        html += f"""
+        out += f"""
   <div class="card" style="margin-top:24px;">
     <h2>Test details</h2>
     <p class="meta">{meta_note}</p>
@@ -793,12 +854,12 @@ def build_html(
           <th style="text-align:left; border-bottom:1px solid #404040; padding:6px;">Suite</th>
           <th style="text-align:left; border-bottom:1px solid #404040; padding:6px;">Status</th>"""
         if has_durations:
-            html += """
+            out += """
           <th style="text-align:left; border-bottom:1px solid #404040; padding:6px;">Duration</th>"""
         if has_failures:
-            html += """
+            out += """
           <th style="text-align:left; border-bottom:1px solid #404040; padding:6px;">Failure</th>"""
-        html += """
+        out += """
         </tr>
       </thead>
       <tbody>
@@ -817,17 +878,17 @@ def build_html(
             failure = item.get("failure", "")
             test_id = item.get("testIdentifierString", "")
             status_color = status_colors.get(status, "#9ca3af")
-            html += f"""        <tr>
+            out += f"""        <tr>
           <td style="border-bottom:1px solid #404040; padding:4px 6px;">{name}</td>
           <td style="border-bottom:1px solid #404040; padding:4px 6px;">{suite}</td>
           <td style="border-bottom:1px solid #404040; padding:4px 6px; color:{status_color}; font-weight:bold;">{status}</td>"""
             if has_durations:
-                html += f"""
+                out += f"""
           <td style="border-bottom:1px solid #404040; padding:4px 6px; font-size:12px; color:#9ca3af;">{duration}</td>"""
             if has_failures:
-                html += f"""
+                out += f"""
           <td style="border-bottom:1px solid #404040; padding:4px 6px; font-size:12px; color:#9ca3af;">{failure}</td>"""
-            html += """
+            out += """
         </tr>
 """
             # Optional screenshot row: match by testIdentifierString or testIdentifierURL
@@ -840,27 +901,27 @@ def build_html(
                             break
                 if imgs:
                     colspan = 3 + (1 if has_durations else 0) + (1 if has_failures else 0)
-                    html += f"""        <tr class="screenshot-row">
+                    out += f"""        <tr class="screenshot-row">
           <td colspan="{colspan}" style="border-bottom:1px solid #404040; padding:8px 6px;">
             <div class="screenshot-label" style="font-size:11px; margin-bottom:4px;">Screenshots</div>
             <div style="display:flex; flex-wrap:wrap; gap:8px;">"""
                     for fn in imgs[:10]:
                         src = f"{screenshot_dir_relative}/{fn}"
-                        html += f'<img src="{src}" alt="{fn}" style="max-width:280px; max-height:200px; border:1px solid #404040; border-radius:4px;" />'
+                        out += f'<img src="{src}" alt="{fn}" style="max-width:280px; max-height:200px; border:1px solid #404040; border-radius:4px;" />'
                     if len(imgs) > 10:
-                        html += f'<span style="font-size:12px; color:#9ca3af;">+{len(imgs)-10} more</span>'
-                    html += """</div>
+                        out += f'<span style="font-size:12px; color:#9ca3af;">+{len(imgs)-10} more</span>'
+                    out += """</div>
           </td>
         </tr>
 """
-        html += """      </tbody>
+        out += """      </tbody>
     </table>
   </div>
 """
 
     # Close the document (Chart.js script: must interpolate passed/failed/skipped).
     # Chart is stored so beforeprint can redraw legend with dark text for printing.
-    html += f"""
+    out += f"""
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     Chart.defaults.color = '#d1d5db';
@@ -904,7 +965,7 @@ def build_html(
 </body>
 </html>
 """
-    return html
+    return out
 
 
 class XCResultGUI:

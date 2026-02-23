@@ -24,15 +24,33 @@
     .subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
     label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
     input[type="text"] {
-      width: 100%; padding: 10px 12px; border: 1px solid #333; border-radius: 8px;
-      background: #2a2a2a; color: #fff; font-size: 14px; outline: none;
-      transition: border-color .15s;
+      width: 100%; padding: 10px 12px; border: 1px solid #404040; border-radius: 8px;
+      background: #252525; color: #e8e8e8; font-size: 14px; outline: none;
+      transition: border-color .15s, box-shadow .15s;
     }
-    input[type="text"]:focus { border-color: #4a9eff; }
+    input[type="text"]::placeholder { color: #888; }
+    input[type="text"]:focus { border-color: #4a9eff; box-shadow: 0 0 0 2px rgba(74,158,255,0.2); }
+    input[type="datetime-local"] {
+      width: 100%; padding: 10px 12px; border: 1px solid #404040; border-radius: 8px;
+      background: #252525; color: #e8e8e8; font-size: 14px; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input[type="datetime-local"]:focus { border-color: #4a9eff; box-shadow: 0 0 0 2px rgba(74,158,255,0.2); }
     .field { margin-bottom: 18px; }
-    .meta-fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+    .meta-fields {
+      margin-bottom: 20px; padding: 14px 16px;
+      background: #1a1a1a; border: 1px solid #333; border-radius: 10px;
+    }
+    .meta-fields-header {
+      font-size: 11px; color: #666; margin-bottom: 10px;
+    }
+    .meta-fields-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;
+    }
     .meta-fields .meta-field { margin-bottom: 0; }
-    @media (max-width: 480px) { .meta-fields { grid-template-columns: 1fr; } }
+    .meta-fields label { color: #b0b0b0; font-size: 12px; margin-bottom: 6px; white-space: nowrap; }
+    .meta-fields input { height: 40px; width: 100%; }
+    @media (max-width: 520px) { .meta-fields-grid { grid-template-columns: 1fr; } }
 
     .divider {
       display: flex; align-items: center; gap: 12px;
@@ -131,6 +149,7 @@
         <div class="header-text">
           <h1>XCResult Report Generator</h1>
           <p class="subtitle">Generate an HTML test report from an Xcode .xcresult bundle.</p>
+          <p/>
         </div>
         <button type="button" class="info-btn" id="infoBtn" title="How to use">i</button>
       </div>
@@ -147,22 +166,25 @@
         <div class="divider"></div>
 
         <div class="field">
-          <label for="title">Report title (optional)</label>
+          <label for="title">Report title</label>
           <input type="text" id="title" name="title" placeholder="XCTest Summary" />
         </div>
 
         <div class="meta-fields">
-          <div class="field meta-field">
-            <label for="run_by">Who ran it (optional)</label>
-            <input type="text" id="run_by" name="run_by" placeholder="e.g. CI, developer name" />
-          </div>
-          <div class="field meta-field">
-            <label for="run_at">When it ran (optional)</label>
-            <input type="text" id="run_at" name="run_at" placeholder="e.g. 2026-02-23 17:00" />
-          </div>
-          <div class="field meta-field">
-            <label for="version">Against which version (optional)</label>
-            <input type="text" id="version" name="version" placeholder="e.g. 1.2.3, build 42" />
+          <div class="meta-fields-header">Optional</div>
+          <div class="meta-fields-grid">
+            <div class="field meta-field">
+              <label for="run_by">Who ran it</label>
+              <input type="text" id="run_by" name="run_by" placeholder="CI / name" />
+            </div>
+            <div class="field meta-field">
+              <label for="run_at">When it ran</label>
+              <input type="datetime-local" id="run_at" name="run_at" />
+            </div>
+            <div class="field meta-field">
+              <label for="version">Version</label>
+              <input type="text" id="version" name="version" placeholder="2026.1.0" />
+            </div>
           </div>
         </div>
 
@@ -176,6 +198,7 @@
       </form>
     </div>
     <div class="footer">XCResult Report Server &middot; macOS</div>
+    <div class="footer">Version 2.6 &middot; February 2026</div>
     <br />
     <div class="footer">Built with passion</div>
   </div>
@@ -183,7 +206,7 @@
   <div class="modal-overlay" id="infoModal" aria-hidden="true">
     <div class="modal-content">
       <button type="button" class="modal-close" id="modalClose" aria-label="Close">&times;</button>
-      <img src="{{ url_for('static', filename='xctest_result.png') }}" alt="Steps (placeholder)" />
+      <img src="{{ url_for('static', filename='UploadTestBundleCompressed.gif') }}" alt="Steps (placeholder)" />
     </div>
   </div>
 
