@@ -101,19 +101,19 @@
 
     .footer { text-align: center; margin-top: 16px; font-size: 11px; color: #444; }
 
-    .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-    .header-logo { width: 48px; height: 48px; flex-shrink: 0; border-radius: 8px; }
+    .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .header-logo { display: none; }
     .header-text { flex: 1; min-width: 0; }
     .header-text .subtitle { margin-bottom: 0; }
     .header-row h1 { margin: 0 0 4px; }
     .info-btn {
-      flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
-      border: 1px solid #444; background: #2a2a2a; color: #888;
-      font-size: 14px; font-weight: 600; cursor: pointer;
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 1px solid #4a9eff; background: rgba(74,158,255,0.15); color: #4a9eff;
+      font-size: 16px; font-weight: 600; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       transition: border-color .2s, color .2s, background .2s;
     }
-    .info-btn:hover { border-color: #4a9eff; color: #4a9eff; background: rgba(74,158,255,0.1); }
+    .info-btn:hover { border-color: #6bb5ff; color: #6bb5ff; background: rgba(74,158,255,0.25); }
 
     .modal-overlay {
       display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
