@@ -152,6 +152,7 @@ Add contact / fill a bug option
 - File uploads are capped at 2 GB. Zip contents are checked for path traversal and size before extraction.
 - All text fields (title, who ran it, version) are validated: max 50 characters, alphanumeric and common punctuation only.
 - **Do not run a generic file server** (e.g. `python -m http.server`) in a directory that contains `.xcresult` bundles. That would expose bundle contents. Use only this application for report generation and serving.
+- **Restricting access by IP:** If you want only specific devices to connect, do it at the router or firewall level rather than in the app. Assign fixed IPs to your devices (most routers let you reserve an IP by MAC address), then use your router's access control or IP filtering to restrict the server port to those IPs only. On macOS you can also use the built-in `pf` firewall for the same effect. This is more reliable than app-level checks because traffic is blocked before it reaches the server.
 
 ## If you plan to expose this to the public internet
 
