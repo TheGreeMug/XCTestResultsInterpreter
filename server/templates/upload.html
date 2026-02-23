@@ -137,6 +137,33 @@
     .modal-body .why { margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; color: #9ca3af; font-size: 13px; text-align: center; }
     .modal-body .why strong { color: #e0e0e0; }
     .modal-body code { background: #2a2a2a; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+
+    .processing-overlay {
+      display: none; position: fixed; inset: 0; z-index: 2000;
+      background: rgba(0,0,0,0.85); align-items: center; justify-content: center;
+      padding: 24px; pointer-events: auto;
+    }
+    .processing-overlay.active { display: flex; }
+    .processing-overlay .box {
+      background: #1e1e1e; border: 1px solid #333; border-radius: 14px;
+      padding: 32px; max-width: 360px; width: 100%; text-align: center;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    .processing-overlay .message { color: #e0e0e0; font-size: 16px; margin-bottom: 20px; }
+    .processing-overlay .progress-wrap {
+      height: 8px; background: #2a2a2a; border-radius: 4px; overflow: hidden;
+    }
+    .processing-overlay .progress-fill {
+      height: 100%; width: 0%; background: #4a9eff; border-radius: 4px;
+      transition: width 0.15s ease-out;
+    }
+    .processing-overlay .progress-fill.indeterminate {
+      width: 30%; animation: progress-indeterminate 1.2s ease-in-out infinite;
+    }
+    @keyframes progress-indeterminate {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
   </style>
 </head>
 <body>
@@ -215,6 +242,15 @@
       <button type="button" class="modal-close" id="helpModalClose" aria-label="Close">&times;</button>
       <h2 class="modal-title" id="helpModalTitle">Something went wrong</h2>
       <div class="modal-body" id="helpModalBody"></div>
+    </div>
+  </div>
+
+  <div class="processing-overlay" id="processingOverlay" aria-hidden="true">
+    <div class="box">
+      <p class="message" id="processingMessage">Please wait, we're processing the files.</p>
+      <div class="progress-wrap">
+        <div class="progress-fill" id="processingProgress"></div>
+      </div>
     </div>
   </div>
 
@@ -310,6 +346,30 @@
       }
     }
 
+    const processingOverlay = document.getElementById('processingOverlay');
+    const processingMessage = document.getElementById('processingMessage');
+    const processingProgress = document.getElementById('processingProgress');
+
+    function showProcessingOverlay(uploadPhase) {
+      processingOverlay.classList.add('active');
+      processingOverlay.setAttribute('aria-hidden', 'false');
+      processingProgress.classList.remove('indeterminate');
+      processingProgress.style.width = '0%';
+      processingMessage.textContent = uploadPhase ? 'Uploading\u2026' : 'Please wait, we\'re processing the files.';
+    }
+
+    function hideProcessingOverlay() {
+      processingOverlay.classList.remove('active');
+      processingOverlay.setAttribute('aria-hidden', 'true');
+      processingProgress.classList.remove('indeterminate');
+      processingProgress.style.width = '0%';
+    }
+
+    function setProgress(pct) {
+      processingProgress.classList.remove('indeterminate');
+      processingProgress.style.width = Math.min(100, Math.max(0, pct)) + '%';
+    }
+
     form.addEventListener('submit', (e) => {
       if (fileInput.files.length) {
         const name = fileInput.files[0].name.toLowerCase();
@@ -327,13 +387,71 @@
           return;
         }
       }
+
+      e.preventDefault();
       submitBtn.disabled = true;
       submitBtn.textContent = 'Processing\u2026';
       spinner.classList.add('active');
+
+      var longWaitTimer = null;
+      var hasSwitchedMessage = false;
+      function startLongWaitTimer() {
+        if (longWaitTimer) return;
+        longWaitTimer = setTimeout(function() {
+          hasSwitchedMessage = true;
+          processingMessage.textContent = 'Still at it. Pushing the line towards the finish line.';
+        }, 20000);
+      }
+
+      showProcessingOverlay(true);
+      startLongWaitTimer();
+
+      var formData = new FormData(form);
+      var xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', function(ev) {
+        if (ev.lengthComputable && ev.total > 0) {
+          setProgress((ev.loaded / ev.total) * 100);
+        }
+      });
+
+      xhr.addEventListener('load', function() {
+        clearTimeout(longWaitTimer);
+        hideProcessingOverlay();
+        resetProcessingState();
+        if (xhr.status >= 200 && xhr.status < 400) {
+          window.location = xhr.responseURL;
+        } else {
+          showHelpModal('Upload failed', 'The server returned an error ('.concat(xhr.status, '). Try again or use a smaller file.'), null, false);
+        }
+      });
+
+      xhr.addEventListener('error', function() {
+        clearTimeout(longWaitTimer);
+        hideProcessingOverlay();
+        resetProcessingState();
+        showHelpModal('Upload failed', 'The request could not be completed. Check your connection and try again.', null, false);
+      });
+
+      xhr.addEventListener('abort', function() {
+        clearTimeout(longWaitTimer);
+        hideProcessingOverlay();
+        resetProcessingState();
+      });
+
+      xhr.open('POST', form.action);
+      xhr.send(formData);
+
+      xhr.upload.addEventListener('load', function() {
+        processingMessage.textContent = 'Please wait, we\'re processing the files.';
+        setProgress(100);
+        processingProgress.classList.add('indeterminate');
+      });
     });
 
     function resetProcessingState() {
       submitBtn.textContent = 'Generate Report';
+      submitBtn.disabled = false;
       spinner.classList.remove('active');
       updateSubmit();
     }
