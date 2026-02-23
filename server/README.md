@@ -146,11 +146,36 @@ Add contact / fill a bug option
 
 ## Security notes
 
-- The server is intended for **local / trusted LAN use only**.
+- The server is designed for **local / trusted LAN use** with a small number of known users.
+- HTTP Basic Auth is enabled by default (username `ETD`, password set via `--password`). Change the default password before first use.
 - Use `--cert` and `--key` to serve over **HTTPS** (encrypted). Self-signed certificates are fine for local/LAN; the browser will prompt you to accept the cert once.
-- There is no authentication. Do not expose the server to the public internet without adding auth (and HTTPS).
-- File uploads are capped at 2 GB.
-- **Do not run a generic file server** (e.g. `python -m http.server`) in a directory that contains `.xcresult` bundles. That would expose bundle contents (e.g. Index of .../something.xcresult/). Use only this application for report generation and serving.
+- File uploads are capped at 2 GB. Zip contents are checked for path traversal and size before extraction.
+- All text fields (title, who ran it, version) are validated: max 50 characters, alphanumeric and common punctuation only.
+- **Do not run a generic file server** (e.g. `python -m http.server`) in a directory that contains `.xcresult` bundles. That would expose bundle contents. Use only this application for report generation and serving.
+
+## If you plan to expose this to the public internet
+
+The server was built for trusted LAN use. Before making it internet-facing, you must address the following:
+
+1. **HTTPS is mandatory.** Use `--cert` and `--key` with a proper TLS certificate (e.g. from Let's Encrypt). Without HTTPS, credentials and uploads are sent in plaintext and can be intercepted by anyone on the network path.
+
+2. **Replace HTTP Basic Auth.** Basic Auth sends credentials base64-encoded (not encrypted) on every request. Over HTTPS this is acceptable, but for public use consider replacing it with session-based login (e.g. Flask-Login), OAuth, or an API key header.
+
+3. **Put it behind a reverse proxy.** Do not expose the Flask development server directly. Use a production WSGI server (e.g. gunicorn) behind nginx or Caddy. The reverse proxy handles TLS termination, rate limiting, request buffering, and connection management.
+
+4. **Add rate limiting.** The current server has no rate limiting. An attacker could flood it with uploads to exhaust disk or CPU. Add rate limiting at the reverse proxy level (e.g. nginx `limit_req`) or with Flask-Limiter.
+
+5. **Lower the upload size limit.** 2 GB is generous. For public use, reduce `MAX_CONTENT_LENGTH` to something like 200 MB unless you expect very large bundles.
+
+6. **Add CSRF protection.** The upload form has no CSRF token. An attacker could craft a page that submits a form to your server on behalf of an authenticated user. Use Flask-WTF or add a CSRF token to the form.
+
+7. **Sanitize error messages.** Exception text shown in the help modal may include internal file paths (e.g. `/Users/you/...`). For public use, replace raw exception messages with generic error text and log the details server-side only.
+
+8. **Harden report URLs.** Report IDs are 48-bit random hex strings. For public use, increase to full 128-bit UUIDs or add per-user scoping so users can only access their own reports.
+
+9. **Add log rotation and monitoring.** Logs and reports accumulate in `server/tmp/`. For a public deployment, add log rotation, disk usage monitoring, and more aggressive cleanup (e.g. delete reports after 24 hours instead of 12 months).
+
+10. **Set a strong, persistent secret key.** Set the `SECRET_KEY` environment variable to a fixed random value so session cookies survive server restarts. Generate one with: `python3 -c "import os; print(os.urandom(32).hex())"`.
 
 ---
 
