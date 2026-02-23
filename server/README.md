@@ -140,6 +140,10 @@ The `-L` flag follows the redirect to the generated report.
 
 Uploaded bundles are saved to the OS temp directory and cleaned up after processing. Generated reports are kept in the temp directory until the OS clears them or you restart.
 
+## TO DO
+
+Add contact / fill a bug option
+
 ## Security notes
 
 - The server is intended for **local / trusted LAN use only**.

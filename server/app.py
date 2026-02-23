@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from xcresult_gui_v6 import _process_xcresult_to_html  # noqa: E402
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "xcresult-dev-key")
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
 
 UPLOAD_DIR = Path(tempfile.gettempdir()) / "xcresult_server_uploads"
 REPORT_DIR = Path(tempfile.gettempdir()) / "xcresult_server_reports"
@@ -63,21 +63,29 @@ _cleanup_old_files(LOG_DIR, max_age_days=365)
 _cleanup_old_files(REPORT_DIR, max_age_days=365)
 
 
-def _resolve_local_path(raw_path: str) -> Path:
-    """Validate and return a local .xcresult path."""
-    p = Path(raw_path.strip()).expanduser().resolve()
-    if not p.exists():
-        raise ValueError(f"Path does not exist: {p}")
-    if p.suffix != ".xcresult":
-        raise ValueError(
-            f"Not a .xcresult bundle: {p.name}. "
-            "Select a path ending in .xcresult."
-        )
-    return p
+MAX_EXTRACTED_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB total extracted
+
+import re
+
+_SAFE_TEXT_RE = re.compile(r"^[A-Za-z0-9 _.,:;/\-()@#+]+$")
+_MAX_FIELD_LEN = 50
+
+
+def _validate_text_field(value: str, field_name: str) -> str:
+    """Validate a user-supplied text field. Returns sanitised value or raises ValueError."""
+    value = value.strip()
+    if not value:
+        return value
+    if len(value) > _MAX_FIELD_LEN:
+        raise ValueError(f"{field_name} must be {_MAX_FIELD_LEN} characters or fewer.")
+    if not _SAFE_TEXT_RE.match(value):
+        raise ValueError(f"{field_name} contains invalid characters. Use letters, numbers, spaces, and common punctuation only.")
+    return value
 
 
 def _unpack_upload(file_storage) -> Path:
     """Save an uploaded zip and return the path to the .xcresult inside it.
+    Validates against path traversal and zip bombs.
     Deletes the uploaded/extracted files and raises ValueError if the zip is invalid.
     """
     job_id = uuid.uuid4().hex[:12]
@@ -92,7 +100,8 @@ def _unpack_upload(file_storage) -> Path:
 
     try:
         filename = file_storage.filename or "upload.zip"
-        saved = job_dir / filename
+        safe_name = Path(filename).name
+        saved = job_dir / safe_name
         file_storage.save(str(saved))
 
         if not zipfile.is_zipfile(str(saved)):
@@ -103,8 +112,22 @@ def _unpack_upload(file_storage) -> Path:
 
         extract_dir = job_dir / "extracted"
         extract_dir.mkdir(exist_ok=True)
+
         with zipfile.ZipFile(str(saved), "r") as zf:
+            total_size = sum(i.file_size for i in zf.infolist())
+            if total_size > MAX_EXTRACTED_SIZE:
+                cleanup()
+                raise ValueError(
+                    f"Zip contents too large ({total_size // (1024*1024)} MB). "
+                    f"Limit is {MAX_EXTRACTED_SIZE // (1024*1024)} MB."
+                )
+            for member in zf.infolist():
+                member_path = Path(extract_dir / member.filename).resolve()
+                if not str(member_path).startswith(str(extract_dir.resolve())):
+                    cleanup()
+                    raise ValueError("Zip contains unsafe path entries (path traversal).")
             zf.extractall(str(extract_dir))
+
         for item in extract_dir.rglob("*.xcresult"):
             if item.is_dir() or item.is_file():
                 return item
@@ -194,6 +217,11 @@ def index():
     return render_template("upload.html")
 
 
+@app.route("/upload", methods=["GET"])
+def upload_redirect():
+    return redirect(url_for("index"))
+
+
 @app.route("/upload", methods=["POST"])
 def upload():
     try:
@@ -202,14 +230,28 @@ def upload():
         run_by = (request.form.get("run_by") or "").strip()
         run_at = (request.form.get("run_at") or "").strip()
         version = (request.form.get("version") or "").strip()
-    except RequestEntityTooLarge:
-        flash("Upload too large. The limit is 2 GB.")
+    except (RequestEntityTooLarge, Exception):
+        _flash_error(
+            "Upload failed. The request may be too large or malformed.",
+            "If you tried to upload a folder, that will not work.<br>"
+            "Right-click the .xcresult in Finder and choose <strong>Compress</strong>,<br>"
+            "or in Terminal run: <code>zip -r MyTests.zip MyTests.xcresult</code><br>"
+            "Then upload the resulting .zip file.",
+        )
         return redirect(url_for("index"))
 
-    local_path = (request.form.get("local_path") or "").strip()
+    try:
+        title = _validate_text_field(title, "Title") or "XCTest Summary"
+        run_by = _validate_text_field(run_by, "Who ran it")
+        run_at = _validate_text_field(run_at, "When it ran")
+        version = _validate_text_field(version, "Version")
+    except ValueError as exc:
+        _flash_error(str(exc), "Check the field and remove any unsupported characters.")
+        return redirect(url_for("index"))
+
     has_file = "file" in request.files and request.files["file"].filename
 
-    if not local_path and not has_file:
+    if not has_file:
         _flash_error(
             "No file received. Select a .zip file containing your .xcresult bundle.",
             "Browsers cannot upload folders.<br>"
@@ -219,14 +261,6 @@ def upload():
             "Then upload the resulting .zip file.",
         )
         return redirect(url_for("index"))
-
-    if local_path:
-        try:
-            xcresult_path = _resolve_local_path(local_path)
-        except ValueError as exc:
-            _flash_error(str(exc), "Check that the path exists and points to a valid .xcresult bundle.")
-            return redirect(url_for("index"))
-        return _generate_report(xcresult_path, title, include_details, run_by=run_by, run_at=run_at, version=version)
 
     try:
         xcresult_path = _unpack_upload(request.files["file"])

@@ -160,14 +160,14 @@
           <p>Drag and drop a zipped .xcresult here</p>
           <span class="hint">or click to browse (.zip only; browsers cannot upload folders)</span>
           <div class="filename" id="fileName"></div>
-          <input type="file" name="file" id="fileInput" accept=".zip,.xcresult" />
+          <input type="file" name="file" id="fileInput" accept=".zip" />
         </div>
 
         <div class="divider"></div>
 
         <div class="field">
           <label for="title">Report title</label>
-          <input type="text" id="title" name="title" placeholder="XCTest Summary" />
+          <input type="text" id="title" name="title" placeholder="XCTest Summary" maxlength="50" />
         </div>
 
         <div class="meta-fields">
@@ -175,7 +175,7 @@
           <div class="meta-fields-grid">
             <div class="field meta-field">
               <label for="run_by">Who ran it</label>
-              <input type="text" id="run_by" name="run_by" placeholder="CI / name" />
+              <input type="text" id="run_by" name="run_by" placeholder="CI / name" maxlength="50" />
             </div>
             <div class="field meta-field">
               <label for="run_at">When it ran</label>
@@ -183,7 +183,7 @@
             </div>
             <div class="field meta-field">
               <label for="version">Version</label>
-              <input type="text" id="version" name="version" placeholder="2026.1.0" />
+              <input type="text" id="version" name="version" placeholder="2026.1.0" maxlength="50" />
             </div>
           </div>
         </div>
@@ -310,7 +310,23 @@
       }
     }
 
-    form.addEventListener('submit', () => {
+    form.addEventListener('submit', (e) => {
+      if (fileInput.files.length) {
+        const name = fileInput.files[0].name.toLowerCase();
+        if (!name.endsWith('.zip')) {
+          e.preventDefault();
+          showHelpModal(
+            'Only .zip files are accepted',
+            'The selected file is not a .zip.',
+            'A .xcresult is a folder, not a file.<br>' +
+            'Right-click it in Finder and choose <strong>Compress</strong> to create a .zip file,<br>' +
+            'or in Terminal run: <code>zip -r MyTests.zip MyTests.xcresult</code><br>' +
+            'Then upload the resulting .zip file.',
+            true
+          );
+          return;
+        }
+      }
       submitBtn.disabled = true;
       submitBtn.textContent = 'Processing\u2026';
       spinner.classList.add('active');
