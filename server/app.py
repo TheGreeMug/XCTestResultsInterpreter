@@ -13,13 +13,14 @@ Requires macOS with Xcode (or Command Line Tools) for xcresulttool.
 import os
 import sys
 import shutil
-import tempfile
 import uuid
 import zipfile
+from functools import wraps
 from pathlib import Path
 
 from flask import (
     Flask,
+    Response,
     flash,
     redirect,
     render_template,
@@ -36,15 +37,39 @@ from xcresult_gui_v6 import _process_xcresult_to_html  # noqa: E402
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
 
-UPLOAD_DIR = Path(tempfile.gettempdir()) / "xcresult_server_uploads"
-REPORT_DIR = Path(tempfile.gettempdir()) / "xcresult_server_reports"
-LOG_DIR = Path(tempfile.gettempdir()) / "xcresult_server_logs"
+_SERVER_DIR = Path(__file__).resolve().parent
+_TMP_ROOT = _SERVER_DIR / "tmp"
+UPLOAD_DIR = _TMP_ROOT / "uploads"
+REPORT_DIR = _TMP_ROOT / "reports"
+LOG_DIR = _TMP_ROOT / "logs"
 
 MAX_CONTENT_LENGTH = 2 * 1024 * 1024 * 1024  # 2 GB
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
 for d in (UPLOAD_DIR, REPORT_DIR, LOG_DIR):
     d.mkdir(parents=True, exist_ok=True)
+
+AUTH_USERNAME = None
+AUTH_PASSWORD = None
+
+
+def _check_auth(username, password):
+    return username == AUTH_USERNAME and password == AUTH_PASSWORD
+
+
+def _auth_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if AUTH_USERNAME is None:
+            return f(*args, **kwargs)
+        auth = request.authorization
+        if not auth or not _check_auth(auth.username, auth.password):
+            return Response(
+                "Login required.", 401,
+                {"WWW-Authenticate": 'Basic realm="XCResult Report Server"'},
+            )
+        return f(*args, **kwargs)
+    return decorated
 
 
 def _cleanup_old_files(directory: Path, max_age_days: int = 365) -> None:
@@ -213,16 +238,19 @@ def handle_bad_request(exc):
 
 
 @app.route("/", methods=["GET"])
+@_auth_required
 def index():
     return render_template("upload.html")
 
 
 @app.route("/upload", methods=["GET"])
+@_auth_required
 def upload_redirect():
     return redirect(url_for("index"))
 
 
 @app.route("/upload", methods=["POST"])
+@_auth_required
 def upload():
     try:
         title = (request.form.get("title") or "").strip() or "XCTest Summary"
@@ -287,6 +315,7 @@ def upload():
 
 
 @app.route("/report/<report_id>")
+@_auth_required
 def report(report_id):
     html_path = REPORT_DIR / f"{report_id}.html"
     if not html_path.exists():
@@ -296,6 +325,7 @@ def report(report_id):
 
 
 @app.route("/download/<report_id>")
+@_auth_required
 def download(report_id):
     html_path = REPORT_DIR / f"{report_id}.html"
     if not html_path.exists():
@@ -316,6 +346,8 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="127.0.0.1", help="Bind address (use 0.0.0.0 for LAN access)")
     parser.add_argument("--port", type=int, default=5050, help="Port to listen on")
     parser.add_argument("--debug", action="store_true", help="Enable Flask debug mode")
+    parser.add_argument("--username", default="ETD", help="Username for HTTP Basic Auth (default: ETD)")
+    parser.add_argument("--password", default="ios", help="Password for HTTP Basic Auth (default: default)")
     parser.add_argument(
         "--cert",
         metavar="PATH",
@@ -327,6 +359,10 @@ if __name__ == "__main__":
         help="Path to TLS private key (PEM). If omitted with --cert, --cert is used as combined cert+key.",
     )
     args = parser.parse_args()
+
+    AUTH_USERNAME = args.username
+    AUTH_PASSWORD = args.password
+    print(f"Authentication enabled (username: {AUTH_USERNAME})")
 
     ssl_context = None
     if args.cert:
@@ -350,5 +386,5 @@ if __name__ == "__main__":
         except Exception:
             local_ip = "your-mac-ip"
         print(f"LAN access: {scheme}://{local_ip}:{args.port}")
-
+    print(f"Data stored in: {_TMP_ROOT}")
     app.run(host=args.host, port=args.port, debug=args.debug, ssl_context=ssl_context)

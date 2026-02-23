@@ -35,5 +35,8 @@ output/
 *.swo
 *~
 
+# Server temp data (uploads, reports, logs)
+server/tmp/
+
 # WeasyPrint / system (optional cache)
 .weasyprint/
