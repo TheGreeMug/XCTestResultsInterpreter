@@ -78,7 +78,6 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .footer { text-align: center; margin-top: 16px; font-size: 11px; color: #444; }
-    .path-hint { font-size: 11px; color: #555; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -96,15 +95,6 @@
       <p class="subtitle">Generate an HTML test report from an Xcode .xcresult bundle.</p>
 
       <form method="post" action="/upload" enctype="multipart/form-data" id="uploadForm">
-
-        <div class="field">
-          <label for="local_path">Path to .xcresult on this Mac</label>
-          <input type="text" id="local_path" name="local_path"
-                 placeholder="/path/to/YourTests.xcresult" autocomplete="off" />
-          <div class="path-hint">Tip: drag the .xcresult from Finder into this field to paste its path.</div>
-        </div>
-
-        <div class="divider">or upload a zip</div>
 
         <div class="drop-zone" id="dropZone">
           <p>Drag and drop a zipped .xcresult here</p>
@@ -139,15 +129,10 @@
     const submitBtn = document.getElementById('submitBtn');
     const spinner = document.getElementById('spinner');
     const form = document.getElementById('uploadForm');
-    const localPath = document.getElementById('local_path');
-
     function updateSubmit() {
-      const hasPath = localPath.value.trim().length > 0;
       const hasFile = fileInput.files && fileInput.files.length > 0;
-      submitBtn.disabled = !(hasPath || hasFile);
+      submitBtn.disabled = !hasFile;
     }
-
-    localPath.addEventListener('input', updateSubmit);
 
     dropZone.addEventListener('click', () => fileInput.click());
     dropZone.addEventListener('dragover', (e) => {
