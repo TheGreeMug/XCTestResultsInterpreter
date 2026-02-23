@@ -39,7 +39,7 @@ UPLOAD_DIR = Path(tempfile.gettempdir()) / "xcresult_server_uploads"
 REPORT_DIR = Path(tempfile.gettempdir()) / "xcresult_server_reports"
 LOG_DIR = Path(tempfile.gettempdir()) / "xcresult_server_logs"
 
-MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500 MB
+MAX_CONTENT_LENGTH = 2 * 1024 * 1024 * 1024  # 2 GB
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
 for d in (UPLOAD_DIR, REPORT_DIR, LOG_DIR):
@@ -207,9 +207,32 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="127.0.0.1", help="Bind address (use 0.0.0.0 for LAN access)")
     parser.add_argument("--port", type=int, default=5050, help="Port to listen on")
     parser.add_argument("--debug", action="store_true", help="Enable Flask debug mode")
+    parser.add_argument(
+        "--cert",
+        metavar="PATH",
+        help="Path to TLS certificate (PEM). Enables HTTPS. Use with --key, or a combined PEM for both.",
+    )
+    parser.add_argument(
+        "--key",
+        metavar="PATH",
+        help="Path to TLS private key (PEM). If omitted with --cert, --cert is used as combined cert+key.",
+    )
     args = parser.parse_args()
 
-    print(f"Starting XCResult Report server on http://{args.host}:{args.port}")
+    ssl_context = None
+    if args.cert:
+        cert_path = Path(args.cert)
+        if not cert_path.exists():
+            print(f"Error: certificate file not found: {cert_path}", file=sys.stderr)
+            sys.exit(1)
+        key_path = Path(args.key).resolve() if args.key else cert_path
+        if not key_path.exists():
+            print(f"Error: key file not found: {key_path}", file=sys.stderr)
+            sys.exit(1)
+        ssl_context = (str(cert_path), str(key_path))
+
+    scheme = "https" if ssl_context else "http"
+    print(f"Starting XCResult Report server on {scheme}://{args.host}:{args.port}")
     if args.host == "0.0.0.0":
         import socket
         hostname = socket.gethostname()
@@ -217,6 +240,6 @@ if __name__ == "__main__":
             local_ip = socket.gethostbyname(hostname)
         except Exception:
             local_ip = "your-mac-ip"
-        print(f"LAN access: http://{local_ip}:{args.port}")
+        print(f"LAN access: {scheme}://{local_ip}:{args.port}")
 
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    app.run(host=args.host, port=args.port, debug=args.debug, ssl_context=ssl_context)

@@ -49,6 +49,24 @@ The server prints your local IP so you can open `http://<your-ip>:5050` from ano
 python3 server/app.py --port 8080
 ```
 
+**HTTPS (secure):**
+
+Use your own TLS certificate and key so the server is served over HTTPS (browsers will show a lock; self-signed certs will show a warning you can accept). Generate a self-signed cert (valid 365 days) in the project or server directory:
+
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
+```
+
+Then start the server with TLS:
+
+```bash
+python3 server/app.py --cert cert.pem --key key.pem
+```
+
+For LAN access with HTTPS, use the same cert and add `--host 0.0.0.0`. You can use a single combined PEM file for both cert and key: `--cert combined.pem` (omit `--key`).
+
+**"Your connection is not private" / ERR_CERT_AUTHORITY_INVALID:** Browsers show this for self-signed certs because they are not signed by a public CA. This is expected. Choose **Advanced** (or **Show Details**) and then **Proceed to ...** (Chrome) or **Visit this website** (Safari) to continue. You only need to do this once per browser; the connection is still encrypted.
+
 **Debug mode** (auto-reload on code changes):
 
 ```bash
@@ -57,7 +75,7 @@ python3 server/app.py --debug
 
 ### 4. Open in browser
 
-Navigate to `http://127.0.0.1:5050` (or your LAN address).
+Navigate to `http://127.0.0.1:5050` (or your LAN address). If you started with `--cert`/`--key`, use `https://` instead.
 
 ## How to use
 
@@ -114,6 +132,8 @@ The `-L` flag follows the redirect to the generated report.
 |------|---------|-------------|
 | `--host` | `127.0.0.1` | Bind address. Use `0.0.0.0` for LAN access. |
 | `--port` | `5050` | Port to listen on. |
+| `--cert` | - | Path to TLS certificate (PEM). Enables HTTPS. |
+| `--key` | - | Path to TLS private key (PEM). Omit if using a combined cert+key file. |
 | `--debug` | off | Enable Flask debug mode (auto-reload). |
 
 ## File storage
@@ -123,8 +143,9 @@ Uploaded bundles are saved to the OS temp directory and cleaned up after process
 ## Security notes
 
 - The server is intended for **local / trusted LAN use only**.
-- There is no authentication. Do not expose it to the public internet without adding auth and HTTPS.
-- File uploads are capped at 500 MB.
+- Use `--cert` and `--key` to serve over **HTTPS** (encrypted). Self-signed certificates are fine for local/LAN; the browser will prompt you to accept the cert once.
+- There is no authentication. Do not expose the server to the public internet without adding auth (and HTTPS).
+- File uploads are capped at 2 GB.
 
 ---
 

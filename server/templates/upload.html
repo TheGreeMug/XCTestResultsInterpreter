@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>XCResult Report</title>
+  <title>XCResult Report Generator</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
   <style>
@@ -78,6 +78,35 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .footer { text-align: center; margin-top: 16px; font-size: 11px; color: #444; }
+
+    .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .header-row h1 { flex: 1; }
+    .info-btn {
+      flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+      border: 1px solid #444; background: #2a2a2a; color: #888;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color .2s, color .2s, background .2s;
+    }
+    .info-btn:hover { border-color: #4a9eff; color: #4a9eff; background: rgba(74,158,255,0.1); }
+
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+      z-index: 1000; align-items: center; justify-content: center; padding: 24px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-content {
+      background: #1e1e1e; border: 1px solid #333; border-radius: 14px;
+      max-width: 90vw; max-height: 90vh; overflow: auto;
+      position: relative; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    .modal-content img { display: block; max-width: 100%; height: auto; border-radius: 0 0 14px 14px; }
+    .modal-close {
+      position: absolute; top: 10px; right: 10px; width: 32px; height: 32px;
+      border-radius: 8px; border: 1px solid #333; background: #2a2a2a; color: #ccc;
+      font-size: 18px; cursor: pointer; line-height: 1; padding: 0;
+    }
+    .modal-close:hover { background: #333; color: #fff; }
   </style>
 </head>
 <body>
@@ -91,7 +120,10 @@
     {% endwith %}
 
     <div class="card">
-      <h1>XCResult Report</h1>
+      <div class="header-row">
+        <h1>XCResult Report Generator</h1>
+        <button type="button" class="info-btn" id="infoBtn" title="How to use">i</button>
+      </div>
       <p class="subtitle">Generate an HTML test report from an Xcode .xcresult bundle.</p>
 
       <form method="post" action="/upload" enctype="multipart/form-data" id="uploadForm">
@@ -120,6 +152,15 @@
       </form>
     </div>
     <div class="footer">XCResult Report Server &middot; macOS</div>
+    <br />
+    <div class="footer">Built with passion</div>
+  </div>
+
+  <div class="modal-overlay" id="infoModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+      <img src="{{ url_for('static', filename='xctest_result.png') }}" alt="Steps (placeholder)" />
+    </div>
   </div>
 
   <script>
@@ -163,6 +204,21 @@
       submitBtn.textContent = 'Processing\u2026';
       spinner.classList.add('active');
     });
+
+    const infoBtn = document.getElementById('infoBtn');
+    const infoModal = document.getElementById('infoModal');
+    const modalClose = document.getElementById('modalClose');
+    infoBtn.addEventListener('click', () => {
+      infoModal.classList.add('active');
+      infoModal.setAttribute('aria-hidden', 'false');
+    });
+    function closeModal() {
+      infoModal.classList.remove('active');
+      infoModal.setAttribute('aria-hidden', 'true');
+    }
+    modalClose.addEventListener('click', closeModal);
+    infoModal.addEventListener('click', (e) => { if (e.target === infoModal) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
   </script>
 </body>
 </html>
