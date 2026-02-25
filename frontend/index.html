@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>XCResult Report Generator</title>
+  <link rel="icon" type="image/png" href="xctest_result.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      margin: 0; padding: 0;
+      background: #111; color: #e0e0e0;
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh;
+    }
+    .container { width: 100%; max-width: 540px; padding: 20px; }
+    .card {
+      background: #1e1e1e; border: 1px solid #333; border-radius: 14px;
+      padding: 32px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; color: #fff; }
+    .subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
+    label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+    input[type="text"] {
+      width: 100%; padding: 10px 12px; border: 1px solid #404040; border-radius: 8px;
+      background: #252525; color: #e8e8e8; font-size: 14px; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input[type="text"]::placeholder { color: #888; }
+    input[type="text"]:focus { border-color: #4a9eff; box-shadow: 0 0 0 2px rgba(74,158,255,0.2); }
+    input[type="datetime-local"] {
+      width: 100%; padding: 10px 12px; border: 1px solid #404040; border-radius: 8px;
+      background: #252525; color: #e8e8e8; font-size: 14px; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input[type="datetime-local"]:focus { border-color: #4a9eff; box-shadow: 0 0 0 2px rgba(74,158,255,0.2); }
+    .field { margin-bottom: 18px; }
+    .meta-fields {
+      margin-bottom: 20px; padding: 14px 16px;
+      background: #1a1a1a; border: 1px solid #333; border-radius: 10px;
+    }
+    .meta-fields-header { font-size: 11px; color: #666; margin-bottom: 10px; }
+    .meta-fields-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .meta-fields .meta-field { margin-bottom: 0; }
+    .meta-fields label { color: #b0b0b0; font-size: 12px; margin-bottom: 6px; white-space: nowrap; }
+    .meta-fields input { height: 40px; width: 100%; }
+    @media (max-width: 520px) { .meta-fields-grid { grid-template-columns: 1fr; } }
+
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 20px 0; font-size: 12px; color: #555;
+    }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #333; }
+
+    .drop-zone {
+      border: 2px dashed #444; border-radius: 12px; padding: 28px 16px;
+      text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #4a9eff; background: rgba(74,158,255,0.06);
+    }
+    .drop-zone p { margin: 0 0 4px; font-size: 14px; color: #ccc; }
+    .drop-zone .hint { font-size: 12px; color: #666; }
+    .drop-zone .filename { font-size: 13px; color: #4a9eff; margin-top: 8px; word-break: break-all; }
+    .drop-zone input[type="file"] { display: none; }
+
+    .checkbox-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 20px; font-size: 13px; color: #aaa;
+    }
+    .checkbox-row input[type="checkbox"] { accent-color: #4a9eff; }
+
+    button[type="submit"] {
+      width: 100%; padding: 12px; border: none; border-radius: 10px;
+      background: #4a9eff; color: #fff; font-size: 15px; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    button[type="submit"]:hover { background: #3a8eef; }
+    button[type="submit"]:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+    .banner {
+      border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px;
+      display: none;
+    }
+    .banner.error {
+      background: #3a1c1c; border: 1px solid #6b2c2c; color: #f87171;
+    }
+    .banner.success {
+      background: #1c3a1c; border: 1px solid #2c6b2c; color: #6ee7b7;
+    }
+    .banner a { color: inherit; text-decoration: underline; cursor: pointer; }
+
+    .spinner { display: none; margin-top: 12px; text-align: center; }
+    .spinner.active { display: block; }
+    .spinner::after {
+      content: ''; display: inline-block; width: 22px; height: 22px;
+      border: 3px solid #333; border-top-color: #4a9eff; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer { text-align: center; margin-top: 16px; font-size: 11px; color: #444; }
+
+    .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .header-logo { display: none; }
+    .header-text { flex: 1; min-width: 0; }
+    .header-text .subtitle { margin-bottom: 0; }
+    .header-row h1 { margin: 0 0 4px; }
+    .info-btn {
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 1px solid #4a9eff; background: rgba(74,158,255,0.15); color: #4a9eff;
+      font-size: 16px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color .2s, color .2s, background .2s;
+    }
+    .info-btn:hover { border-color: #6bb5ff; color: #6bb5ff; background: rgba(74,158,255,0.25); }
+
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+      z-index: 1000; align-items: center; justify-content: center; padding: 24px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-content {
+      background: #1e1e1e; border: 1px solid #333; border-radius: 14px;
+      max-width: 90vw; max-height: 90vh; overflow: auto;
+      position: relative; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    .modal-content img { display: block; max-width: 100%; height: auto; border-radius: 0 0 14px 14px; }
+    .modal-close {
+      position: absolute; top: 10px; right: 10px; width: 32px; height: 32px;
+      border-radius: 8px; border: 1px solid #333; background: #2a2a2a; color: #ccc;
+      font-size: 18px; cursor: pointer; line-height: 1; padding: 0;
+    }
+    .modal-close:hover { background: #333; color: #fff; }
+    .modal-title {
+      margin: 0 0 12px; padding: 20px 20px 0 20px; font-size: 18px; color: #fff; text-align: center;
+    }
+    .modal-body {
+      padding: 12px 20px 20px; color: #ccc; font-size: 14px; line-height: 1.5; text-align: center;
+    }
+    .modal-body .why {
+      margin-top: 16px; padding-top: 12px; border-top: 1px solid #333;
+      color: #9ca3af; font-size: 13px; text-align: center;
+    }
+    .modal-body .why strong { color: #e0e0e0; }
+    .modal-body code { background: #2a2a2a; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+
+    .processing-overlay {
+      display: none; position: fixed; inset: 0; z-index: 2000;
+      background: rgba(0,0,0,0.85); align-items: center; justify-content: center;
+      padding: 24px; pointer-events: auto;
+    }
+    .processing-overlay.active { display: flex; }
+    .processing-overlay .box {
+      background: #1e1e1e; border: 1px solid #333; border-radius: 14px;
+      padding: 32px; max-width: 360px; width: 100%; text-align: center;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    .processing-overlay .message { color: #e0e0e0; font-size: 16px; margin-bottom: 20px; }
+    .processing-overlay .progress-wrap {
+      height: 8px; background: #2a2a2a; border-radius: 4px; overflow: hidden;
+    }
+    .processing-overlay .progress-fill {
+      height: 100%; width: 0%; background: #4a9eff; border-radius: 4px;
+      transition: width 0.15s ease-out;
+    }
+    .processing-overlay .progress-fill.indeterminate {
+      width: 30%; animation: progress-indeterminate 1.2s ease-in-out infinite;
+    }
+    @keyframes progress-indeterminate {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="banner" id="banner"></div>
+
+    <div class="card">
+      <div class="header-row">
+        <img src="xctest_result.png" alt="" class="header-logo" />
+        <div class="header-text">
+          <h1>XCResult Report Generator</h1>
+          <p class="subtitle">Generate an HTML test report from an Xcode .xcresult bundle.</p>
+          <p></p>
+        </div>
+        <button type="button" class="info-btn" id="infoBtn" title="How to use">i</button>
+      </div>
+
+      <form id="uploadForm">
+        <div class="drop-zone" id="dropZone">
+          <p>Drag and drop a zipped .xcresult here</p>
+          <span class="hint">or click to browse (.zip only; browsers cannot upload folders)</span>
+          <div class="filename" id="fileName"></div>
+          <input type="file" name="file" id="fileInput" accept=".zip" />
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="field">
+          <label for="title">Report title</label>
+          <input type="text" id="title" name="title" placeholder="XCTest Summary" maxlength="50" />
+        </div>
+
+        <div class="meta-fields">
+          <div class="meta-fields-header">Optional</div>
+          <div class="meta-fields-grid">
+            <div class="field meta-field">
+              <label for="run_by">Who ran it</label>
+              <input type="text" id="run_by" name="run_by" placeholder="CI / name" maxlength="50" />
+            </div>
+            <div class="field meta-field">
+              <label for="run_at">When it ran</label>
+              <input type="datetime-local" id="run_at" name="run_at" />
+            </div>
+            <div class="field meta-field">
+              <label for="version">Version</label>
+              <input type="text" id="version" name="version" placeholder="2026.1.0" maxlength="50" />
+            </div>
+          </div>
+        </div>
+
+        <div class="checkbox-row">
+          <input type="checkbox" id="include_details" name="include_details" />
+          <label for="include_details" style="margin:0;">Include detailed test list</label>
+        </div>
+
+        <button type="submit" id="submitBtn" disabled>Generate Report</button>
+        <div class="spinner" id="spinner"></div>
+      </form>
+    </div>
+    <div class="footer">XCResult Report Server &middot; macOS</div>
+    <div class="footer">Version 3.0 &middot; February 2026</div>
+    <br />
+    <div class="footer">Built with passion</div>
+  </div>
+
+  <!-- How-to modal -->
+  <div class="modal-overlay" id="infoModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+      <img src="UploadTestBundleCompressed.gif" alt="How to use" />
+    </div>
+  </div>
+
+  <!-- Error / help modal -->
+  <div class="modal-overlay" id="helpModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="helpModalClose" aria-label="Close">&times;</button>
+      <h2 class="modal-title" id="helpModalTitle">Something went wrong</h2>
+      <div class="modal-body" id="helpModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Processing overlay -->
+  <div class="processing-overlay" id="processingOverlay" aria-hidden="true">
+    <div class="box">
+      <p class="message" id="processingMessage">Uploading&#8230;</p>
+      <div class="progress-wrap">
+        <div class="progress-fill" id="processingProgress"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =====================================================================
+    // CONFIGURATION -- update these two values before deploying
+    // =====================================================================
+    var API_URL = 'https://site.asuscom.com';   // Mac backend (Caddy -> Flask)
+    var API_KEY = '';                            // set to match --api-key on the server
+
+    // =====================================================================
+    // DOM references
+    // =====================================================================
+    var dropZone          = document.getElementById('dropZone');
+    var fileInput         = document.getElementById('fileInput');
+    var fileNameEl        = document.getElementById('fileName');
+    var submitBtn         = document.getElementById('submitBtn');
+    var spinner           = document.getElementById('spinner');
+    var form              = document.getElementById('uploadForm');
+    var banner            = document.getElementById('banner');
+    var helpModal         = document.getElementById('helpModal');
+    var helpModalTitle    = document.getElementById('helpModalTitle');
+    var helpModalBody     = document.getElementById('helpModalBody');
+    var processingOverlay = document.getElementById('processingOverlay');
+    var processingMessage = document.getElementById('processingMessage');
+    var processingProgress= document.getElementById('processingProgress');
+
+    var currentJobId = null;
+
+    // =====================================================================
+    // Banner helpers
+    // =====================================================================
+    function showBanner(msg, type) {
+      banner.textContent = '';
+      banner.className = 'banner ' + type;
+      banner.style.display = 'block';
+      if (type === 'success' && currentJobId) {
+        banner.innerHTML = escapeHtml(msg) +
+          ' <a id="downloadAgainLink">Download again</a>';
+        document.getElementById('downloadAgainLink').addEventListener('click', function(e) {
+          e.preventDefault();
+          triggerDownload(currentJobId);
+        });
+      } else {
+        banner.textContent = msg;
+      }
+    }
+
+    function hideBanner() {
+      banner.style.display = 'none';
+    }
+
+    // =====================================================================
+    // Modal helpers
+    // =====================================================================
+    function escapeHtml(s) {
+      var d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function showHelpModal(title, message, whyText, whyIsHtml) {
+      helpModalTitle.textContent = title;
+      var body = '<p>' + escapeHtml(message) + '</p>';
+      if (whyText) {
+        body += '<div class="why"><strong>Why this happens / What to do:</strong><br>' +
+                (whyIsHtml ? whyText : escapeHtml(whyText)) + '</div>';
+      }
+      helpModalBody.innerHTML = body;
+      helpModal.classList.add('active');
+      helpModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeHelpModal() {
+      helpModal.classList.remove('active');
+      helpModal.setAttribute('aria-hidden', 'true');
+    }
+
+    document.getElementById('helpModalClose').addEventListener('click', closeHelpModal);
+    helpModal.addEventListener('click', function(e) { if (e.target === helpModal) closeHelpModal(); });
+
+    // =====================================================================
+    // Processing overlay
+    // =====================================================================
+    function showProcessingOverlay(uploadPhase) {
+      processingOverlay.classList.add('active');
+      processingOverlay.setAttribute('aria-hidden', 'false');
+      processingProgress.classList.remove('indeterminate');
+      processingProgress.style.width = '0%';
+      processingMessage.textContent = uploadPhase ? 'Uploading\u2026' : 'Processing\u2026';
+    }
+
+    function hideProcessingOverlay() {
+      processingOverlay.classList.remove('active');
+      processingOverlay.setAttribute('aria-hidden', 'true');
+      processingProgress.classList.remove('indeterminate');
+      processingProgress.style.width = '0%';
+    }
+
+    function setProgress(pct) {
+      processingProgress.classList.remove('indeterminate');
+      processingProgress.style.width = Math.min(100, Math.max(0, pct)) + '%';
+    }
+
+    // =====================================================================
+    // File selection
+    // =====================================================================
+    function updateSubmit() {
+      submitBtn.disabled = !(fileInput.files && fileInput.files.length > 0);
+    }
+
+    dropZone.addEventListener('click', function() { fileInput.click(); });
+    dropZone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('dragover'); });
+    dropZone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        onFileSelected();
+      }
+    });
+
+    fileInput.addEventListener('change', onFileSelected);
+
+    function onFileSelected() {
+      if (!fileInput.files.length) return;
+      var name = fileInput.files[0].name;
+      if (name.endsWith('.xcresult')) {
+        fileNameEl.textContent = '';
+        fileInput.value = '';
+        showHelpModal(
+          'Cannot upload .xcresult directly',
+          'You selected a .xcresult bundle. The server cannot accept it as a single file.',
+          'A .xcresult is a folder that contains the test results.<br>' +
+          'Browsers cannot upload folders.<br>' +
+          'Right-click it in Finder and choose <strong>Compress</strong> to create a .zip file,<br>' +
+          'or in Terminal run: <code>zip -r MyTests.zip MyTests.xcresult</code><br>' +
+          'Then upload the resulting .zip file.',
+          true
+        );
+        updateSubmit();
+        return;
+      }
+      fileNameEl.textContent = name;
+      updateSubmit();
+    }
+
+    // =====================================================================
+    // Form reset
+    // =====================================================================
+    function resetFormState() {
+      submitBtn.textContent = 'Generate Report';
+      submitBtn.disabled = false;
+      spinner.classList.remove('active');
+      updateSubmit();
+    }
+
+    window.addEventListener('pageshow', resetFormState);
+
+    // =====================================================================
+    // Download helper
+    // =====================================================================
+    function triggerDownload(jobId) {
+      var url = API_URL + '/api/download/' + jobId;
+      if (API_KEY) url += '?api_key=' + encodeURIComponent(API_KEY);
+
+      fetch(url)
+        .then(function(resp) {
+          if (!resp.ok) throw new Error('Download failed (' + resp.status + ')');
+          return resp.blob();
+        })
+        .then(function(blob) {
+          var objUrl = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = objUrl;
+          a.download = 'xctest_report_' + jobId + '.html';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(objUrl);
+        })
+        .catch(function(err) {
+          showHelpModal('Download failed', err.message, null, false);
+        });
+    }
+
+    // =====================================================================
+    // Cleanup helper
+    // =====================================================================
+    function cleanupJob(jobId) {
+      var opts = { method: 'POST' };
+      if (API_KEY) opts.headers = { 'X-API-Key': API_KEY };
+      fetch(API_URL + '/api/cleanup/' + jobId, opts).catch(function() {});
+    }
+
+    // =====================================================================
+    // Status polling
+    // =====================================================================
+    function pollStatus(jobId) {
+      var pollCount = 0;
+      var longWaitTimer = setTimeout(function() {
+        processingMessage.textContent = 'Still at it. Pushing the line towards the finish line.';
+      }, 20000);
+
+      var interval = setInterval(function() {
+        pollCount++;
+        var url = API_URL + '/api/status/' + jobId;
+        var opts = {};
+        if (API_KEY) opts.headers = { 'X-API-Key': API_KEY };
+
+        fetch(url, opts)
+          .then(function(resp) { return resp.json(); })
+          .then(function(data) {
+            if (data.status === 'done') {
+              clearInterval(interval);
+              clearTimeout(longWaitTimer);
+              sessionStorage.removeItem('pendingJobId');
+              processingMessage.textContent = 'Done! Downloading report\u2026';
+              setProgress(100);
+
+              triggerDownload(jobId);
+
+              setTimeout(function() {
+                hideProcessingOverlay();
+                resetFormState();
+                currentJobId = jobId;
+                showBanner('Report downloaded successfully!', 'success');
+              }, 1500);
+
+              setTimeout(function() { cleanupJob(jobId); }, 5000);
+
+            } else if (data.status === 'error') {
+              clearInterval(interval);
+              clearTimeout(longWaitTimer);
+              sessionStorage.removeItem('pendingJobId');
+              hideProcessingOverlay();
+              resetFormState();
+              showHelpModal(
+                'Processing failed',
+                data.error || 'Unknown error during conversion.',
+                'The bundle may be corrupted, from an unsupported Xcode version, ' +
+                'or not a valid test result. Try another .xcresult or re-export from Xcode.',
+                false
+              );
+            }
+          })
+          .catch(function() {
+            if (pollCount > 60) {
+              clearInterval(interval);
+              clearTimeout(longWaitTimer);
+              sessionStorage.removeItem('pendingJobId');
+              hideProcessingOverlay();
+              resetFormState();
+              showHelpModal(
+                'Connection lost',
+                'Could not reach the conversion server after many retries.',
+                'Check your network connection and whether the Mac backend is still running.',
+                false
+              );
+            }
+          });
+      }, 2000);
+    }
+
+    // =====================================================================
+    // Resume pending job on page reload
+    // =====================================================================
+    (function() {
+      var pending = sessionStorage.getItem('pendingJobId');
+      if (pending) {
+        showProcessingOverlay(false);
+        processingMessage.textContent = 'Resuming\u2026 checking job status.';
+        processingProgress.classList.add('indeterminate');
+        pollStatus(pending);
+      }
+    })();
+
+    // =====================================================================
+    // Upload (form submit)
+    // =====================================================================
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      hideBanner();
+
+      if (fileInput.files.length) {
+        var name = fileInput.files[0].name.toLowerCase();
+        if (!name.endsWith('.zip')) {
+          showHelpModal(
+            'Only .zip files are accepted',
+            'The selected file is not a .zip.',
+            'A .xcresult is a folder, not a file.<br>' +
+            'Right-click it in Finder and choose <strong>Compress</strong> to create a .zip file,<br>' +
+            'or in Terminal run: <code>zip -r MyTests.zip MyTests.xcresult</code><br>' +
+            'Then upload the resulting .zip file.',
+            true
+          );
+          return;
+        }
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Processing\u2026';
+      spinner.classList.add('active');
+      showProcessingOverlay(true);
+
+      var formData = new FormData(form);
+      var xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', function(ev) {
+        if (ev.lengthComputable && ev.total > 0) {
+          setProgress((ev.loaded / ev.total) * 100);
+        }
+      });
+
+      xhr.upload.addEventListener('load', function() {
+        processingMessage.textContent = 'Processing upload\u2026';
+        setProgress(100);
+      });
+
+      xhr.addEventListener('load', function() {
+        if (xhr.status === 202) {
+          var data;
+          try { data = JSON.parse(xhr.responseText); } catch (_) { data = {}; }
+          var jobId = data.job_id;
+          if (!jobId) {
+            hideProcessingOverlay();
+            resetFormState();
+            showHelpModal('Upload failed', 'Server returned an unexpected response.', null, false);
+            return;
+          }
+          sessionStorage.setItem('pendingJobId', jobId);
+          processingMessage.textContent = 'Converting\u2026 please wait.';
+          processingProgress.classList.add('indeterminate');
+          pollStatus(jobId);
+        } else {
+          hideProcessingOverlay();
+          resetFormState();
+          var msg = 'Upload failed (' + xhr.status + ').';
+          try {
+            var errData = JSON.parse(xhr.responseText);
+            if (errData.error) msg = errData.error;
+          } catch (_) {}
+          showHelpModal('Upload failed', msg, null, false);
+        }
+      });
+
+      xhr.addEventListener('error', function() {
+        hideProcessingOverlay();
+        resetFormState();
+        showHelpModal(
+          'Connection failed',
+          'Could not reach the conversion server.',
+          'Make sure the Mac backend is running and reachable at:<br><code>' +
+          escapeHtml(API_URL) + '</code>',
+          true
+        );
+      });
+
+      xhr.addEventListener('abort', function() {
+        hideProcessingOverlay();
+        resetFormState();
+      });
+
+      xhr.open('POST', API_URL + '/api/upload');
+      if (API_KEY) xhr.setRequestHeader('X-API-Key', API_KEY);
+      xhr.send(formData);
+    });
+
+    // =====================================================================
+    // Info modal
+    // =====================================================================
+    var infoBtn    = document.getElementById('infoBtn');
+    var infoModal  = document.getElementById('infoModal');
+    var modalClose = document.getElementById('modalClose');
+
+    infoBtn.addEventListener('click', function() {
+      infoModal.classList.add('active');
+      infoModal.setAttribute('aria-hidden', 'false');
+    });
+    function closeInfoModal() {
+      infoModal.classList.remove('active');
+      infoModal.setAttribute('aria-hidden', 'true');
+    }
+    modalClose.addEventListener('click', closeInfoModal);
+    infoModal.addEventListener('click', function(e) { if (e.target === infoModal) closeInfoModal(); });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { closeInfoModal(); closeHelpModal(); }
+    });
+  </script>
+</body>
+</html>

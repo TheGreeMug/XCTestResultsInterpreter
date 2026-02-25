@@ -1,0 +1,31 @@
+# Caddy reverse proxy for the XCResult Report API.
+#
+# Caddy automatically provisions a Let's Encrypt TLS certificate for the
+# domain below. Requirements:
+#   - DNS A record for site.asuscom.com points to your Mac's public IP.
+#   - Ports 80 (ACME challenge) and 443 (HTTPS) are forwarded to this Mac.
+#   - Caddy runs as root or has permission to bind to 80/443.
+#
+# Usage:
+#   caddy run                   (foreground, uses ./Caddyfile)
+#   caddy start                 (background daemon)
+#   caddy stop                  (stop the daemon)
+
+{
+	servers {
+		timeouts {
+			read_body   10m
+			read_header 30s
+			write       10m
+			idle        5m
+		}
+	}
+}
+
+site.asuscom.com {
+	request_body {
+		max_size 1100MB
+	}
+
+	reverse_proxy localhost:5050
+}
