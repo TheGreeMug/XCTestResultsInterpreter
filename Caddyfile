@@ -2,7 +2,7 @@
 #
 # Caddy automatically provisions a Let's Encrypt TLS certificate for the
 # domain below. Requirements:
-#   - DNS A record for site.asuscom.com points to your Mac's public IP.
+#   - DNS A record for astudvpn.asuscomm.com points to your Mac's public IP.
 #   - Ports 80 (ACME challenge) and 443 (HTTPS) are forwarded to this Mac.
 #   - Caddy runs as root or has permission to bind to 80/443.
 #
@@ -22,7 +22,7 @@
 	}
 }
 
-site.asuscom.com {
+astudvpn.asuscomm.com {
 	request_body {
 		max_size 1100MB
 	}

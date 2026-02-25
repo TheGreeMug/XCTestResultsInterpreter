@@ -1,7 +1,7 @@
 # Option A (Expose your Mac backend): Security risks and mitigations
 
 ## Context
-Option A means your Mac runs a public-facing service reachable from the internet (eg `site.asuscom.com:5454`), which accepts large uploads (up to ~1 GB), processes them using Xcode tooling, then returns generated HTML/PDF and deletes artefacts.
+Option A means your Mac runs a public-facing service reachable from the internet (eg `astudvpn.asuscomm.com:5454`), which accepts large uploads (up to ~1 GB), processes them using Xcode tooling, then returns generated HTML/PDF and deletes artefacts.
 
 This is feasible, but you must treat it as an internet-exposed file ingestion and code-execution-adjacent service.
 
