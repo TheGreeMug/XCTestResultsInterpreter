@@ -85,6 +85,8 @@ def _cors_headers(response):
 def _require_api_key(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return f(*args, **kwargs)
         if API_KEY is None:
             return f(*args, **kwargs)
         key = request.headers.get("X-API-Key") or request.args.get("api_key")
