@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MP3 Metadata Stripper</title>
+  <link rel="icon" type="image/png" href="mp3.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      margin: 0; padding: 0;
+      background: #111; color: #e0e0e0;
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh;
+    }
+    .container { width: 100%; max-width: 540px; padding: 20px; }
+    .card {
+      background: #1e1e1e; border: 1px solid #333; border-radius: 14px;
+      padding: 32px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; color: #fff; }
+    .subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
+    label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+
+    .drop-zone {
+      border: 2px dashed #444; border-radius: 12px; padding: 28px 16px;
+      text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #4a9eff; background: rgba(74,158,255,0.06);
+    }
+    .drop-zone p { margin: 0 0 4px; font-size: 14px; color: #ccc; }
+    .drop-zone .hint { font-size: 12px; color: #666; }
+    .drop-zone .filename { font-size: 13px; color: #4a9eff; margin-top: 8px; word-break: break-all; }
+    .drop-zone input[type="file"] { display: none; }
+
+    button[type="submit"] {
+      width: 100%; padding: 12px; border: none; border-radius: 10px;
+      background: #4a9eff; color: #fff; font-size: 15px; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+      margin-top: 20px;
+    }
+    button[type="submit"]:hover { background: #3a8eef; }
+    button[type="submit"]:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+    .banner {
+      border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px;
+      display: none;
+    }
+    .banner.error {
+      background: #3a1c1c; border: 1px solid #6b2c2c; color: #f87171;
+    }
+    .banner.success {
+      background: #1c3a1c; border: 1px solid #2c6b2c; color: #6ee7b7;
+    }
+
+    .spinner { display: none; margin-top: 12px; text-align: center; }
+    .spinner.active { display: block; }
+    .spinner::after {
+      content: ''; display: inline-block; width: 22px; height: 22px;
+      border: 3px solid #333; border-top-color: #4a9eff; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer { text-align: center; margin-top: 16px; font-size: 11px; color: #444; }
+
+    .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .header-logo { display: none; }
+    .header-text { flex: 1; min-width: 0; }
+    .header-text .subtitle { margin-bottom: 0; }
+    .header-row h1 { margin: 0 0 4px; }
+    .info-btn {
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 1px solid #4a9eff; background: rgba(74,158,255,0.15); color: #4a9eff;
+      font-size: 16px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color .2s, color .2s, background .2s;
+    }
+    .info-btn:hover { border-color: #6bb5ff; color: #6bb5ff; background: rgba(74,158,255,0.25); }
+
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+      z-index: 1000; align-items: center; justify-content: center; padding: 24px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-content {
+      background: #1e1e1e; border: 1px solid #333; border-radius: 14px;
+      max-width: 90vw; max-height: 90vh; overflow: auto;
+      position: relative; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    .modal-close {
+      position: absolute; top: 10px; right: 10px; width: 32px; height: 32px;
+      border-radius: 8px; border: 1px solid #333; background: #2a2a2a; color: #ccc;
+      font-size: 18px; cursor: pointer; line-height: 1; padding: 0;
+    }
+    .modal-close:hover { background: #333; color: #fff; }
+    .modal-title {
+      margin: 0 0 12px; padding: 20px 20px 0 20px; font-size: 18px; color: #fff; text-align: center;
+    }
+    .modal-body {
+      padding: 12px 20px 20px; color: #ccc; font-size: 14px; line-height: 1.5; text-align: center;
+    }
+    .modal-body .why {
+      margin-top: 16px; padding-top: 12px; border-top: 1px solid #333;
+      color: #9ca3af; font-size: 13px; text-align: center;
+    }
+    .modal-body .why strong { color: #e0e0e0; }
+    .modal-body code { background: #2a2a2a; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+
+    .processing-overlay {
+      display: none; position: fixed; inset: 0; z-index: 2000;
+      background: rgba(0,0,0,0.85); align-items: center; justify-content: center;
+      padding: 24px; pointer-events: auto;
+    }
+    .processing-overlay.active { display: flex; }
+    .processing-overlay .box {
+      background: #1e1e1e; border: 1px solid #333; border-radius: 14px;
+      padding: 32px; max-width: 360px; width: 100%; text-align: center;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    .processing-overlay .message { color: #e0e0e0; font-size: 16px; margin-bottom: 20px; }
+    .processing-overlay .progress-wrap {
+      height: 8px; background: #2a2a2a; border-radius: 4px; overflow: hidden;
+    }
+    .processing-overlay .progress-fill {
+      height: 100%; width: 0%; background: #4a9eff; border-radius: 4px;
+      transition: width 0.15s ease-out;
+    }
+    .processing-overlay .progress-fill.indeterminate {
+      width: 30%; animation: progress-indeterminate 1.2s ease-in-out infinite;
+    }
+    @keyframes progress-indeterminate {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="banner" id="banner"></div>
+
+    <div class="card">
+      <div class="header-row">
+        <img src="mp3.png" alt="" class="header-logo" />
+        <div class="header-text">
+          <h1>MP3 Metadata Stripper</h1>
+          <p class="subtitle">Remove metadata from MP3 files. Upload an MP3 and download a clean copy.</p>
+        </div>
+        <button type="button" class="info-btn" id="infoBtn" title="Info">i</button>
+      </div>
+
+      <form id="uploadForm">
+        <div class="drop-zone" id="dropZone">
+          <p>Drag and drop an MP3 here</p>
+          <span class="hint">or click to browse (.mp3 only)</span>
+          <div class="filename" id="fileName"></div>
+          <input type="file" name="file" id="fileInput" accept=".mp3,audio/mpeg" />
+        </div>
+
+        <button type="submit" id="submitBtn" disabled>Strip and download</button>
+        <div class="spinner" id="spinner"></div>
+      </form>
+    </div>
+    <div class="footer">MP3 Metadata Stripper</div>
+    <div class="footer">Version 1.0 &middot; February 2026</div>
+  </div>
+
+  <!-- Info modal -->
+  <div class="modal-overlay" id="infoModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+      <h2 class="modal-title">How it works</h2>
+      <div class="modal-body">
+        <p>Select an MP3 file. The server will strip all metadata (ID3 tags, cover art, etc.) and return a new file. Your file is not stored.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error / help modal -->
+  <div class="modal-overlay" id="helpModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="helpModalClose" aria-label="Close">&times;</button>
+      <h2 class="modal-title" id="helpModalTitle">Something went wrong</h2>
+      <div class="modal-body" id="helpModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Processing overlay -->
+  <div class="processing-overlay" id="processingOverlay" aria-hidden="true">
+    <div class="box">
+      <p class="message" id="processingMessage">Stripping metadata&#8230;</p>
+      <div class="progress-wrap">
+        <div class="progress-fill indeterminate" id="processingProgress"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =====================================================================
+    // CONFIGURATION -- update these before deploying
+    // =====================================================================
+    var API_URL = 'https://astudvpn.asuscomm.com/mp3';   // base for /api/strip (no trailing /api)
+    var API_KEY = 'wc6aLnN7YeYdmTjZdfMEYZgHyAENkdGW6z7DnBRiHnI';
+
+    // =====================================================================
+    // DOM references
+    // =====================================================================
+    var dropZone          = document.getElementById('dropZone');
+    var fileInput         = document.getElementById('fileInput');
+    var fileNameEl        = document.getElementById('fileName');
+    var submitBtn         = document.getElementById('submitBtn');
+    var spinner           = document.getElementById('spinner');
+    var form              = document.getElementById('uploadForm');
+    var banner            = document.getElementById('banner');
+    var helpModal         = document.getElementById('helpModal');
+    var helpModalTitle    = document.getElementById('helpModalTitle');
+    var helpModalBody     = document.getElementById('helpModalBody');
+    var processingOverlay = document.getElementById('processingOverlay');
+    var processingMessage = document.getElementById('processingMessage');
+    var processingProgress= document.getElementById('processingProgress');
+
+    // =====================================================================
+    // Banner helpers
+    // =====================================================================
+    function showBanner(msg, type) {
+      banner.textContent = msg;
+      banner.className = 'banner ' + type;
+      banner.style.display = 'block';
+    }
+
+    function hideBanner() {
+      banner.style.display = 'none';
+    }
+
+    // =====================================================================
+    // Modal helpers
+    // =====================================================================
+    function escapeHtml(s) {
+      var d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function showHelpModal(title, message, whyText, whyIsHtml) {
+      helpModalTitle.textContent = title;
+      var body = '<p>' + escapeHtml(message) + '</p>';
+      if (whyText) {
+        body += '<div class="why"><strong>Why this happens / What to do:</strong><br>' +
+                (whyIsHtml ? whyText : escapeHtml(whyText)) + '</div>';
+      }
+      helpModalBody.innerHTML = body;
+      helpModal.classList.add('active');
+      helpModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeHelpModal() {
+      helpModal.classList.remove('active');
+      helpModal.setAttribute('aria-hidden', 'true');
+    }
+
+    document.getElementById('helpModalClose').addEventListener('click', closeHelpModal);
+    helpModal.addEventListener('click', function(e) { if (e.target === helpModal) closeHelpModal(); });
+
+    // =====================================================================
+    // Processing overlay
+    // =====================================================================
+    function showProcessingOverlay() {
+      processingOverlay.classList.add('active');
+      processingOverlay.setAttribute('aria-hidden', 'false');
+      processingMessage.textContent = 'Stripping metadata\u2026';
+    }
+
+    function hideProcessingOverlay() {
+      processingOverlay.classList.remove('active');
+      processingOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    // =====================================================================
+    // File selection
+    // =====================================================================
+    function updateSubmit() {
+      submitBtn.disabled = !(fileInput.files && fileInput.files.length > 0);
+    }
+
+    dropZone.addEventListener('click', function() { fileInput.click(); });
+    dropZone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('dragover'); });
+    dropZone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        onFileSelected();
+      }
+    });
+
+    fileInput.addEventListener('change', onFileSelected);
+
+    function onFileSelected() {
+      if (!fileInput.files.length) return;
+      var name = fileInput.files[0].name.toLowerCase();
+      if (!name.endsWith('.mp3')) {
+        fileNameEl.textContent = '';
+        fileInput.value = '';
+        showHelpModal(
+          'Only MP3 files',
+          'Please select an .mp3 file.',
+          'Only MP3 audio files are accepted.',
+          false
+        );
+        updateSubmit();
+        return;
+      }
+      fileNameEl.textContent = fileInput.files[0].name;
+      updateSubmit();
+    }
+
+    // =====================================================================
+    // Form reset
+    // =====================================================================
+    function resetFormState() {
+      submitBtn.textContent = 'Strip and download';
+      submitBtn.disabled = false;
+      spinner.classList.remove('active');
+      updateSubmit();
+    }
+
+    // =====================================================================
+    // Upload (form submit) - sync: POST then download response as file
+    // =====================================================================
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      hideBanner();
+
+      if (!fileInput.files || !fileInput.files.length) return;
+
+      var name = fileInput.files[0].name.toLowerCase();
+      if (!name.endsWith('.mp3')) {
+        showHelpModal(
+          'Only MP3 files',
+          'The selected file is not an .mp3.',
+          'Please choose an MP3 audio file.',
+          false
+        );
+        return;
+      }
+
+      submitBtn.disabled = true;
+      spinner.classList.add('active');
+      showProcessingOverlay();
+
+      var formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      var url = API_URL + '/api/strip';
+      var opts = { method: 'POST', body: formData };
+      if (API_KEY) opts.headers = { 'X-API-Key': API_KEY };
+
+      fetch(url, opts)
+        .then(function(resp) {
+          if (!resp.ok) {
+            return resp.json().then(function(data) {
+              throw new Error(data.error || 'Request failed (' + resp.status + ')');
+            }).catch(function() {
+              throw new Error('Request failed (' + resp.status + ')');
+            });
+          }
+          return resp.blob();
+        })
+        .then(function(blob) {
+          hideProcessingOverlay();
+          resetFormState();
+          var objUrl = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = objUrl;
+          var baseName = fileInput.files[0].name.replace(/\.mp3$/i, '');
+          a.download = baseName + '_stripped.mp3';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(objUrl);
+          showBanner('Download started. Metadata has been stripped.', 'success');
+        })
+        .catch(function(err) {
+          hideProcessingOverlay();
+          resetFormState();
+          if (err.message && err.message.indexOf('fetch') !== -1) {
+            showHelpModal(
+              'Connection failed',
+              'Could not reach the server.',
+              'Make sure the backend is running and reachable at:<br><code>' +
+                escapeHtml(API_URL) + '</code>',
+              true
+            );
+          } else {
+            showHelpModal(
+              'Stripping failed',
+              err.message || 'An error occurred.',
+              'The file may be invalid or the server returned an error. Try another MP3.',
+              false
+            );
+          }
+        });
+    });
+
+    // =====================================================================
+    // Info modal
+    // =====================================================================
+    var infoBtn    = document.getElementById('infoBtn');
+    var infoModal  = document.getElementById('infoModal');
+    var modalClose = document.getElementById('modalClose');
+
+    infoBtn.addEventListener('click', function() {
+      infoModal.classList.add('active');
+      infoModal.setAttribute('aria-hidden', 'false');
+    });
+    function closeInfoModal() {
+      infoModal.classList.remove('active');
+      infoModal.setAttribute('aria-hidden', 'true');
+    }
+    modalClose.addEventListener('click', closeInfoModal);
+    infoModal.addEventListener('click', function(e) { if (e.target === infoModal) closeInfoModal(); });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { closeInfoModal(); closeHelpModal(); }
+    });
+  </script>
+</body>
+</html>

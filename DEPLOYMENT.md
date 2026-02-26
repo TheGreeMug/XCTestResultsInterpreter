@@ -23,6 +23,29 @@ The flow:
 
 ---
 
+wc6aLnN7YeYdmTjZdfMEYZgHyAENkdGW6z7DnBRiHnI
+
+
+source .venv/bin/activate
+python3 app.py \\
+  --host 127.0.0.1 \\
+  --port 5050 \\
+  --api-key "wc6aLnN7YeYdmTjZdfMEYZgHyAENkdGW6z7DnBRiHnI" \\
+  --origins "https://assurance.st,https://www.assurance.st" \\
+  --xctest-max-upload-gb 1.0 \\
+  --xctest-ttl 30 \\
+  --mp3-max-upload-mb 100
+
+  source unified-server/.venv/bin/activate
+python3 -m unified-server.app \
+  --host 127.0.0.1 \
+  --port 5050 \
+  --api-key "wc6aLnN7YeYdmTjZdfMEYZgHyAENkdGW6z7DnBRiHnI" \
+  --origins "https://assurance.st,https://www.assurance.st" \
+  --xctest-max-upload-gb 1.0 \
+  --xctest-ttl 30 \
+  --mp3-max-upload-mb 100
+
 ## 2. Mac backend API (Flask) setup
 
 ### 2.1 Create and activate a virtual environment
