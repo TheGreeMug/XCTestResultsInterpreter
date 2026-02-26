@@ -54,7 +54,7 @@ source .venv/bin/activate
 python3 server/api.py \
   --host 127.0.0.1 \
   --port 5050 \
-  --api-key "YOUR_API_KEY_HERE" \
+  --api-key "pTI_mtPLR5fiyLpu0HXCBsRTSQh4KB5GhXhb1UWZAkk" \
   --origins "https://assurance.st,https://www.assurance.st"
 ```
 
