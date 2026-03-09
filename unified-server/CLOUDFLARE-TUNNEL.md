@@ -207,7 +207,14 @@ var API_KEY = 'YOUR_API_KEY';
 
 ### 4.3 CORS
 
-You already use `--origins "https://assurance.st,https://www.assurance.st"`. No change needed: the **origin** of the page is still assurance.st (or www); only the **API** host changed to api.assurance.st.
+You already use `--origins "https://assurance.st,https://www.assurance.st"`. That is sufficient because the **origin** of the page is still assurance.st (or www); only the **API** host changed to api.assurance.st.  
+If you prefer, you can also include the API host in the list:
+
+```bash
+  --origins "https://assurance.st,https://www.assurance.st,https://api.assurance.st"
+```
+
+This is optional and mainly useful if you want to call the API directly from a page served at `https://api.assurance.st` (for example, if you later host a small status page there).
 
 ### 4.4 Upload updated HTML
 
