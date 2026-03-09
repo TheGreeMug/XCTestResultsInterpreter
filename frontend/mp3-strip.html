@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>MP3 Metadata Stripper</title>
+  <title>MP3 Metadata Cleaner</title>
   <link rel="icon" type="image/png" href="mp3.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
@@ -146,7 +146,7 @@
       <div class="header-row">
         <img src="mp3.png" alt="" class="header-logo" />
         <div class="header-text">
-          <h1>MP3 Metadata Stripper</h1>
+          <h1>MP3 Metadata Cleaner</h1>
           <p class="subtitle">Remove metadata from MP3 files. Upload an MP3 and download a clean copy.</p>
         </div>
         <button type="button" class="info-btn" id="infoBtn" title="Info">i</button>
@@ -160,12 +160,17 @@
           <input type="file" name="file" id="fileInput" accept=".mp3,audio/mpeg" />
         </div>
 
-        <button type="submit" id="submitBtn" disabled>Strip and download</button>
+        <button type="submit" id="submitBtn" disabled>Clean and download</button>
         <div class="spinner" id="spinner"></div>
       </form>
     </div>
-    <div class="footer">MP3 Metadata Stripper</div>
-    <div class="footer">Version 1.0 &middot; February 2026</div>
+    <div class="footer">MP3 Metadata Cleaner</div>
+    <div class="footer">Version 2.6 &middot; February 2026</div>
+    <p class="footer">
+  <a href="/terms.html">Terms</a> &middot; <a href="/privacy.html">Privacy</a>
+</p>
+    <br />
+    <div class="footer">Built with passion</div>
   </div>
 
   <!-- Info modal -->
@@ -174,7 +179,7 @@
       <button type="button" class="modal-close" id="modalClose" aria-label="Close">&times;</button>
       <h2 class="modal-title">How it works</h2>
       <div class="modal-body">
-        <p>Select an MP3 file. The server will strip all metadata (ID3 tags, cover art, etc.) and return a new file. Your file is not stored.</p>
+        <p>Select an MP3 file. The server will clean all metadata (ID3 tags, cover art, etc.) and return a new file. Your file is not stored.</p>
       </div>
     </div>
   </div>
@@ -191,7 +196,7 @@
   <!-- Processing overlay -->
   <div class="processing-overlay" id="processingOverlay" aria-hidden="true">
     <div class="box">
-      <p class="message" id="processingMessage">Stripping metadata&#8230;</p>
+      <p class="message" id="processingMessage">Cleaning metadata&#8230;</p>
       <div class="progress-wrap">
         <div class="progress-fill indeterminate" id="processingProgress"></div>
       </div>
@@ -200,9 +205,10 @@
 
   <script>
     // =====================================================================
-    // CONFIGURATION -- update these before deploying
+    // CONFIGURATION
     // =====================================================================
-    var API_URL = 'https://astudvpn.asuscomm.com/mp3';   // base for /api/strip (no trailing /api)
+    // var API_URL = 'https://astudvpn.asuscomm.com/mp3';
+    var API_KEY = 'https://api.assurance.st/mp3';
     var API_KEY = 'wc6aLnN7YeYdmTjZdfMEYZgHyAENkdGW6z7DnBRiHnI';
 
     // =====================================================================
@@ -270,7 +276,7 @@
     function showProcessingOverlay() {
       processingOverlay.classList.add('active');
       processingOverlay.setAttribute('aria-hidden', 'false');
-      processingMessage.textContent = 'Stripping metadata\u2026';
+      processingMessage.textContent = 'Cleaning metadata\u2026';
     }
 
     function hideProcessingOverlay() {
@@ -325,7 +331,7 @@
     // Form reset
     // =====================================================================
     function resetFormState() {
-      submitBtn.textContent = 'Strip and download';
+      submitBtn.textContent = 'Clean and download';
       submitBtn.disabled = false;
       spinner.classList.remove('active');
       updateSubmit();
@@ -380,12 +386,12 @@
           var a = document.createElement('a');
           a.href = objUrl;
           var baseName = fileInput.files[0].name.replace(/\.mp3$/i, '');
-          a.download = baseName + '_stripped.mp3';
+          a.download = baseName + '_cleaned.mp3';
           document.body.appendChild(a);
           a.click();
           a.remove();
           URL.revokeObjectURL(objUrl);
-          showBanner('Download started. Metadata has been stripped.', 'success');
+          showBanner('Download started. Metadata has been cleaned.', 'success');
         })
         .catch(function(err) {
           hideProcessingOverlay();
@@ -400,7 +406,7 @@
             );
           } else {
             showHelpModal(
-              'Stripping failed',
+              'Cleaning failed',
               err.message || 'An error occurred.',
               'The file may be invalid or the server returned an error. Try another MP3.',
               false
@@ -433,3 +439,4 @@
   </script>
 </body>
 </html>
+
