@@ -159,6 +159,11 @@
       box-shadow: 0 8px 30px rgba(0,0,0,0.5);
     }
     .processing-overlay .message { color: #e0e0e0; font-size: 16px; margin-bottom: 20px; }
+    .processing-overlay .upload-stats {
+      font-size: 13px; color: #9ca3af; margin: 0 0 16px;
+      font-variant-numeric: tabular-nums; line-height: 1.45; text-align: center;
+    }
+    .processing-overlay .upload-stats .line2 { font-size: 12px; color: #6b7280; margin-top: 4px; }
     .processing-overlay .progress-wrap {
       height: 8px; background: #2a2a2a; border-radius: 4px; overflow: hidden;
     }
@@ -234,6 +239,9 @@
     </div>
     <div class="footer">XCResult Report Server &middot; macOS</div>
     <div class="footer">Version 3.5 &middot; February 2026</div>
+    <p class="footer">
+  <a href="/terms.html">Terms</a> &middot; <a href="/privacy.html">Privacy</a>
+</p>
     <br />
     <div class="footer">Built with passion</div>
   </div>
@@ -259,6 +267,10 @@
   <div class="processing-overlay" id="processingOverlay" aria-hidden="true">
     <div class="box">
       <p class="message" id="processingMessage">Uploading&#8230;</p>
+      <div class="upload-stats" id="uploadStats" hidden>
+        <div id="uploadStatsLine1"></div>
+        <div class="line2" id="uploadStatsLine2"></div>
+      </div>
       <div class="progress-wrap">
         <div class="progress-fill" id="processingProgress"></div>
       </div>
@@ -273,7 +285,7 @@
     //var API_KEY = 'pTI_mtPLR5fiyLpu0HXCBsRTSQh4KB5GhXhb1UWZAkk';                            // set to match --api-key on the server
        // var API_KEY = 'wc6aLnN7YeYdmTjZdfMEYZgHyAENkdGW6z7DnBRiHnI';                            // set to match --api-key on the server    
 
-    var API_URL = 'https://astudvpn.asuscomm.com/xctest';
+    var API_URL = 'https://api.assurance.st/xctest';
     var API_KEY = 'wc6aLnN7YeYdmTjZdfMEYZgHyAENkdGW6z7DnBRiHnI';
 
 
@@ -293,8 +305,84 @@
     var processingOverlay = document.getElementById('processingOverlay');
     var processingMessage = document.getElementById('processingMessage');
     var processingProgress= document.getElementById('processingProgress');
+    var uploadStats       = document.getElementById('uploadStats');
+    var uploadStatsLine1  = document.getElementById('uploadStatsLine1');
+    var uploadStatsLine2  = document.getElementById('uploadStatsLine2');
 
     var currentJobId = null;
+
+    var uploadStartTime = 0;
+    var lastUploadLoaded = 0;
+    var lastUploadTotal = 0;
+    var lastUploadLengthComputable = true;
+    var uploadTickTimer = null;
+
+    function formatBytes(n) {
+      if (n === 0) return '0 B';
+      var k = 1024;
+      var sizes = ['B', 'KB', 'MB', 'GB'];
+      var i = Math.min(sizes.length - 1, Math.floor(Math.log(n) / Math.log(k)));
+      var v = n / Math.pow(k, i);
+      return (i === 0 ? Math.round(v) : v.toFixed(i >= 2 ? 2 : 1)) + ' ' + sizes[i];
+    }
+
+    function formatDuration(sec) {
+      if (sec < 0 || !isFinite(sec)) return '0s';
+      if (sec < 60) return Math.max(0, Math.floor(sec)) + 's';
+      if (sec < 3600) {
+        var m = Math.floor(sec / 60);
+        var s = Math.floor(sec % 60);
+        return m + ':' + (s < 10 ? '0' : '') + s;
+      }
+      var h = Math.floor(sec / 3600);
+      var m2 = Math.floor((sec % 3600) / 60);
+      return h + 'h ' + m2 + 'm';
+    }
+
+    function formatSpeed(bytesPerSec) {
+      if (!isFinite(bytesPerSec) || bytesPerSec <= 0) return '—';
+      return formatBytes(bytesPerSec) + '/s';
+    }
+
+    function clearUploadTickTimer() {
+      if (uploadTickTimer) {
+        clearInterval(uploadTickTimer);
+        uploadTickTimer = null;
+      }
+    }
+
+    function tickUploadStats() {
+      var elapsed = (Date.now() - uploadStartTime) / 1000;
+      var primary;
+      if (lastUploadLengthComputable && lastUploadTotal > 0) {
+        var pct = (lastUploadLoaded / lastUploadTotal) * 100;
+        primary = formatBytes(lastUploadLoaded) + ' / ' + formatBytes(lastUploadTotal) +
+          ' (' + Math.min(100, Math.round(pct)) + '%)';
+      } else if (lastUploadTotal > 0) {
+        primary = formatBytes(lastUploadLoaded) + ' / ' + formatBytes(lastUploadTotal);
+      } else {
+        primary = formatBytes(lastUploadLoaded) + ' uploaded';
+      }
+      var speed = elapsed > 0.05 ? lastUploadLoaded / elapsed : 0;
+      uploadStatsLine1.textContent = primary;
+      uploadStatsLine2.textContent = 'Elapsed ' + formatDuration(elapsed) + ' · ' + formatSpeed(speed);
+    }
+
+    function beginUploadProgressTracking(file) {
+      clearUploadTickTimer();
+      uploadStartTime = Date.now();
+      lastUploadLoaded = 0;
+      lastUploadTotal = file && file.size ? file.size : 0;
+      lastUploadLengthComputable = true;
+      uploadStats.hidden = false;
+      tickUploadStats();
+      uploadTickTimer = setInterval(tickUploadStats, 400);
+    }
+
+    function endUploadProgressTracking() {
+      clearUploadTickTimer();
+      uploadStats.hidden = true;
+    }
 
     // =====================================================================
     // Banner helpers
@@ -357,9 +445,11 @@
       processingProgress.classList.remove('indeterminate');
       processingProgress.style.width = '0%';
       processingMessage.textContent = uploadPhase ? 'Uploading\u2026' : 'Processing\u2026';
+      if (!uploadPhase) endUploadProgressTracking();
     }
 
     function hideProcessingOverlay() {
+      endUploadProgressTracking();
       processingOverlay.classList.remove('active');
       processingOverlay.setAttribute('aria-hidden', 'true');
       processingProgress.classList.remove('indeterminate');
@@ -575,17 +665,25 @@
       submitBtn.textContent = 'Processing\u2026';
       spinner.classList.add('active');
       showProcessingOverlay(true);
+      beginUploadProgressTracking(fileInput.files[0]);
 
       var formData = new FormData(form);
       var xhr = new XMLHttpRequest();
 
       xhr.upload.addEventListener('progress', function(ev) {
+        lastUploadLoaded = ev.loaded;
+        lastUploadLengthComputable = ev.lengthComputable;
         if (ev.lengthComputable && ev.total > 0) {
+          lastUploadTotal = ev.total;
           setProgress((ev.loaded / ev.total) * 100);
+        } else if (lastUploadTotal > 0) {
+          setProgress((ev.loaded / lastUploadTotal) * 100);
         }
+        tickUploadStats();
       });
 
       xhr.upload.addEventListener('load', function() {
+        endUploadProgressTracking();
         processingMessage.textContent = 'Processing upload\u2026';
         setProgress(100);
       });

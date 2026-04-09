@@ -65,7 +65,7 @@ if __name__ == "__main__":
                         help="XCTest Job TTL in minutes before auto-cleanup (default: 30)")
     parser.add_argument("--xctest-max-upload-gb", type=float, default=1.0,
                         help="XCTest Maximum upload size in GB (default: 1.0)")
-    parser.add_argument("--mp3-max-upload-mb", type=int, default=100,
+    parser.add_argument("--mp3-max-upload-mb", type=int, default=300,
                         help="MP3 Maximum upload size in MB (default: 100)")
     args = parser.parse_args()
 
